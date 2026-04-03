@@ -101,7 +101,7 @@
 </div>
 
 <script>
-const sessionId = {{ session_id }};
+const sessionId = JSON.parse('{{ session_id | tojson }}');
 
 async function loadReport() {
     const resp = await fetch(`/api/sessions/${sessionId}`);
