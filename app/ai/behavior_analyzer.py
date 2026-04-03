@@ -12,6 +12,7 @@ from app.ai.pose_detector import (
 from app.config import (
     HEAD_DOWN_ANGLE, LYING_RATIO_THRESHOLD,
     HAND_RAISE_MARGIN, FACE_DIRECTION_THRESHOLD,
+    MIN_KEYPOINT_CONF,
 )
 
 
@@ -34,8 +35,10 @@ BEHAVIOR_LABELS = {
 ATTENTIVE_BEHAVIORS = {FOCUSED, HAND_RAISED}
 
 
-def _valid(kpt, min_conf=0.3):
+def _valid(kpt, min_conf=None):
     """关键点是否有效（置信度足够）"""
+    if min_conf is None:
+        min_conf = MIN_KEYPOINT_CONF
     return kpt[2] > min_conf
 
 
@@ -77,15 +80,20 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
     r_eye_vis = _valid(r_eye)
     eyes_hidden = not l_eye_vis and not r_eye_vis  # 双眼不可见 → 脸朝下
 
-    shoulder_mid_y = 0.0
-    shoulder_width = 0.0
-    if has_shoulders:
-        shoulder_mid_y = (l_shoulder[1] + r_shoulder[1]) / 2
-        shoulder_width = abs(l_shoulder[0] - r_shoulder[0])
+    # 上半身关键点质量门控：至少肩膀可见才做精确判定
+    if not has_shoulders:
+        return FOCUSED  # 信息不足，不瞎猜
+
+    shoulder_mid_y = (l_shoulder[1] + r_shoulder[1]) / 2
+    shoulder_width = abs(l_shoulder[0] - r_shoulder[0])
+
+    # 肩宽过小说明人太远或检测质量差
+    if shoulder_width < 15:
+        return FOCUSED
 
     # ---- 1. 趴桌检测 ----
     # 方法A：有髋部——躯干纵向被严重压缩
-    if has_shoulders and _valid(l_hip) and _valid(r_hip) and shoulder_width > 20:
+    if _valid(l_hip) and _valid(r_hip):
         hip_y = (l_hip[1] + r_hip[1]) / 2
         torso_ratio = abs(hip_y - shoulder_mid_y) / shoulder_width
         if torso_ratio < 0.3:
@@ -95,7 +103,7 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
                 return LYING_DOWN
 
     # 方法B：无髋部（课桌遮挡）——通过鼻子位置 + 眼睛可见性推断
-    if has_shoulders and has_nose and shoulder_width > 20:
+    if has_nose:
         nose_drop = (nose[1] - shoulder_mid_y) / shoulder_width
         # 鼻子明显低于肩膀中点 + 双眼不可见 → 趴在桌上
         if nose_drop > 0.25 and eyes_hidden:
@@ -106,7 +114,7 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
 
     # ---- 2. 举手检测 ----
     # 使用肩宽归一化，远近都适用；肩宽无效时回退到固定像素
-    raise_threshold = shoulder_width * 0.3 if (has_shoulders and shoulder_width > 20) else HAND_RAISE_MARGIN
+    raise_threshold = shoulder_width * 0.3 if shoulder_width > 15 else HAND_RAISE_MARGIN
     l_raised = (_valid(l_wrist) and _valid(l_shoulder)
                 and l_wrist[1] < l_shoulder[1] - raise_threshold)
     r_raised = (_valid(r_wrist) and _valid(r_shoulder)
@@ -115,7 +123,7 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
         return HAND_RAISED
 
     # ---- 3. 低头检测 ----
-    if has_nose and has_shoulders and shoulder_width > 20:
+    if has_nose:
         head_drop = nose[1] - shoulder_mid_y
         relative_drop = head_drop / shoulder_width
         # 鼻子明显低于肩膀中点（看手机、做笔记）
@@ -138,7 +146,7 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
                     return LOOKING_AWAY
         elif l_ear_visible != r_ear_visible:
             # 只看到一只耳朵 → 侧转幅度较大
-            if has_shoulders and shoulder_width > 20:
+            if shoulder_width > 15:
                 shoulder_mid_x = (l_shoulder[0] + r_shoulder[0]) / 2
                 if abs(nose[0] - shoulder_mid_x) > shoulder_width * 0.4:
                     return LOOKING_AWAY

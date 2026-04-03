@@ -4,7 +4,10 @@
 import numpy as np
 from ultralytics import YOLO
 
-from app.config import POSE_MODEL, POSE_CONF_THRESHOLD, POSE_IMG_SIZE
+from app.config import (
+    POSE_MODEL, POSE_CONF_THRESHOLD, POSE_IOU_THRESHOLD,
+    POSE_IMG_SIZE, MIN_KEYPOINT_CONF, MIN_VISIBLE_KEYPOINTS,
+)
 
 
 # COCO关键点索引
@@ -44,7 +47,13 @@ class PoseDetector:
             list[np.ndarray]: 每个人17个关键点的坐标，shape=(17, 3) -> (x, y, conf)
                               如果没检测到人则返回空列表
         """
-        results = self.model(frame, conf=POSE_CONF_THRESHOLD, imgsz=POSE_IMG_SIZE, verbose=False)
+        results = self.model(
+            frame,
+            conf=POSE_CONF_THRESHOLD,
+            iou=POSE_IOU_THRESHOLD,
+            imgsz=POSE_IMG_SIZE,
+            verbose=False,
+        )
 
         persons = []
         for result in results:
@@ -52,6 +61,10 @@ class PoseDetector:
                 continue
             kpts = result.keypoints.data.cpu().numpy()  # shape: (N, 17, 3)
             for person_kpts in kpts:
+                # 过滤关键点质量过低的人（遮挡严重/误检）
+                visible = np.sum(person_kpts[:, 2] >= MIN_KEYPOINT_CONF)
+                if visible < MIN_VISIBLE_KEYPOINTS:
+                    continue
                 persons.append(person_kpts)
 
         return persons
