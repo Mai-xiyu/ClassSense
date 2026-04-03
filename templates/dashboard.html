@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI课堂感知分析平台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<header class="topbar fade-in">
+    <div class="logo">
+        <span class="logo-mark"></span>
+        <h1>ClassSense</h1>
+        <span class="logo-divider"></span>
+        <span class="logo-sub">课堂感知</span>
+    </div>
+    <div class="topbar-right">
+        <a href="/settings" class="icon-btn settings-link" title="系统设置">
+            <i data-lucide="settings"></i>
+        </a>
+        <div class="status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText" class="status-text">连接中</span>
+        </div>
+    </div>
+</header>
+
+<!-- 待上课遮罩层 -->
+<div class="overlay" id="startOverlay">
+    <div class="overlay-content fade-up">
+        <p class="overlay-greeting">新课堂</p>
+        <h2>开始一节课</h2>
+        <p class="overlay-desc">系统将自动识别并追踪学生课堂行为</p>
+        <div class="input-group">
+            <input type="text" class="class-name-input" id="className" placeholder="课程名称，如 高等数学 · 第3讲">
+        </div>
+        <button class="btn btn-primary btn-start btn-animate" id="btnStart" onclick="startClass()">
+            开始检测
+        </button>
+        <div class="history-link">
+            <a href="#" onclick="showHistory()">
+                查看历史记录 <i data-lucide="arrow-right" style="width:12px;height:12px"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- 主内容区 -->
+<div class="main" id="mainContent" style="display:none;">
+    
+    <!-- 左侧列：核心指标 -->
+    <div class="col-left">
+        <!-- 专注度环形指标 -->
+        <div class="card score-card slide-up-stagger-1">
+            <div class="card-title">
+                <i data-lucide="target"></i> 综合专注度
+            </div>
+            <div class="score-ring">
+                <svg viewBox="0 0 160 160">
+                    <circle class="bg-circle" cx="80" cy="80" r="70"/>
+                    <circle class="fg-circle" id="scoreCircle" cx="80" cy="80" r="70"/>
+                </svg>
+                <div class="score-number" id="scoreNumber">
+                    --<span class="score-unit">%</span>
+                </div>
+            </div>
+            <div class="score-label" id="scoreLabel">模型启动中...</div>
+        </div>
+
+        <!-- 统计数字 -->
+        <div class="card stats-card slide-up-stagger-2">
+            <div class="stat-item">
+                <div class="stat-value" id="totalPeople">0</div>
+                <div class="stat-label">出勤人数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="focusedCount">0</div>
+                <div class="stat-label">专注人数</div>
+            </div>
+            <div class="stat-item stat-item-full">
+                <div class="stat-value" id="elapsedTime">00:00</div>
+                <div class="stat-label">已运行时长</div>
+            </div>
+        </div>
+
+        <!-- 行为分布 -->
+        <div class="card behavior-card slide-up-stagger-3">
+            <div class="card-title">
+                <i data-lucide="pie-chart"></i> 行为分布情况
+            </div>
+            <div class="behavior-bars" id="behaviorBars">
+                <div class="empty-state">等待数据流入...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧列：深度分析 -->
+    <div class="col-right">
+        <!-- 专注度时间线 -->
+        <div class="card timeline-card slide-up-stagger-1">
+            <div class="card-title">
+                <i data-lucide="line-chart"></i> 专注度动态时序
+            </div>
+            <div class="chart-container">
+                <canvas id="timelineChart"></canvas>
+            </div>
+        </div>
+
+        <div class="row-bottom slide-up-stagger-2">
+            <!-- AI 助教分析面板 -->
+            <div class="card agent-panel-card" id="agentPanel">
+                <div class="card-header-flex">
+                    <div class="card-title m-0"><i data-lucide="bot"></i> AI 助教洞察</div>
+                    <button class="btn btn-sm btn-ghost btn-animate" id="btnAnalyze" onclick="triggerAnalysis()">
+                        <i data-lucide="sparkles"></i> <span>请求分析</span>
+                    </button>
+                </div>
+                <div class="agent-status-bar" id="agentStatusBar">
+                    <span id="agentStatusText">模型闲置中...</span>
+                </div>
+                <div class="agent-grid">
+                    <div class="agent-card">
+                        <div class="agent-card-header"><i data-lucide="users"></i> 班级整体反馈</div>
+                        <div class="agent-card-body" id="studentContent">
+                            <span class="agent-placeholder">系统正在收集数据以生成反馈，请稍后...</span>
+                        </div>
+                    </div>
+                    <div class="agent-card">
+                        <div class="agent-card-header agent-purple"><i data-lucide="lightbulb"></i> 教学优化建议</div>
+                        <div class="agent-card-body" id="teacherContent">
+                            <span class="agent-placeholder">系统正在评估当前教学效果，请稍后...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 事件日志 -->
+            <div class="card log-card">
+                <div class="card-title">
+                    <i data-lucide="list"></i> 状态日志
+                </div>
+                <ul class="log-list" id="logList">
+                    <li class="log-item">
+                        <span class="log-time">--:--</span>
+                        <span class="log-dot"></span>
+                        <span>系统就绪，等待上课信号...</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- 底部控制栏（上课后显示） -->
+<div class="bottombar slide-up" id="bottomBar" style="display:none;">
+    <button class="btn btn-secondary btn-animate" onclick="showHistory()">
+        <i data-lucide="clock"></i> <span>历史记录</span>
+    </button>
+    <span class="class-info" id="classInfo"></span>
+    <button class="btn btn-danger btn-animate" id="btnStop" onclick="stopClass()">
+        <i data-lucide="square"></i> <span>结束课程</span>
+    </button>
+</div>
+
+<!-- 历史记录弹窗 -->
+<div class="modal-overlay" id="historyModal" style="display:none;" onclick="closeHistory(event)">
+    <div class="modal-content fade-up" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3><i data-lucide="history"></i> 历史记录</h3>
+            <button class="icon-btn modal-close" onclick="document.getElementById('historyModal').style.display='none'">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body" id="historyList">加载中...</div>
+    </div>
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

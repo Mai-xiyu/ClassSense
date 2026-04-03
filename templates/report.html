@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课后复盘报告</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        .report-container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
+        .report-header { text-align: center; margin-bottom: 40px; }
+        .report-header h1 { font-size: 28px; margin-bottom: 8px; }
+        .report-header p { color: var(--text-muted); }
+        .report-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+        .report-stat { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 24px; text-align: center; }
+        .report-stat .value { font-size: 36px; font-weight: 700; }
+        .report-stat .label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+        .report-section { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 24px; margin-bottom: 24px; }
+        .report-section h2 { font-size: 16px; color: var(--text-muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .suggestion-list { list-style: none; }
+        .suggestion-list li { padding: 12px 16px; margin-bottom: 8px; background: #eef4fb; border-left: 3px solid var(--blue); border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.6; }
+        .chart-area { height: 250px; }
+        .back-link { display: inline-block; margin-top: 30px; color: var(--blue); text-decoration: none; font-size: 14px; }
+        .btn-generate-ai {
+            padding: 10px 24px; border-radius: 8px; border: none;
+            background: #f3f0fa; color: #7c6bb4;
+            font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-generate-ai:hover { background: #e8e3f5; }
+        .btn-generate-ai:disabled { opacity: 0.5; cursor: not-allowed; }
+        .ai-history-item {
+            padding: 12px 16px; margin-bottom: 10px;
+            background: #f9f7fc; border-left: 3px solid #7c6bb4;
+            border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.6;
+        }
+        .ai-history-item .agent-tag {
+            display: inline-block; font-size: 11px; font-weight: 600;
+            padding: 2px 8px; border-radius: 4px; margin-right: 8px;
+            background: #f3f0fa; color: #7c6bb4;
+        }
+        .ai-history-item .time-tag { font-size: 11px; color: var(--text-muted); }
+    </style>
+    
+</head>
+<body>
+<div class="report-container">
+    <div class="report-header">
+        <h1>课后复盘报告</h1>
+        <p id="reportMeta">加载中...</p>
+    </div>
+
+    <div class="report-grid">
+        <div class="report-stat">
+            <div class="value" id="rAvgScore">--</div>
+            <div class="label">平均专注度</div>
+        </div>
+        <div class="report-stat">
+            <div class="value" id="rDuration">--</div>
+            <div class="label">课程时长（分钟）</div>
+        </div>
+        <div class="report-stat">
+            <div class="value" id="rSnapshots">--</div>
+            <div class="label">数据采样点</div>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>专注度走势</h2>
+        <div class="chart-area">
+            <canvas id="reportChart"></canvas>
+        </div>
+    </div>
+
+    <div class="report-section">
+        <h2>改进建议</h2>
+        <ul class="suggestion-list" id="suggestions"></ul>
+    </div>
+
+    <!-- AI 助教课后分析 -->
+    <div class="report-section" id="aiSection" style="display:none;">
+        <h2>AI 助教课后分析</h2>
+        <div id="aiSummaryContent" style="line-height:1.8;white-space:pre-wrap;"></div>
+        <button class="btn-generate-ai" id="btnGenerateAI" onclick="generateAISummary()" style="margin-top:16px;">
+            生成 AI 课后总结
+        </button>
+        <div id="aiGenerating" style="display:none;color:var(--text-muted);font-size:13px;margin-top:8px;">
+            AI 正在分析中...
+        </div>
+    </div>
+
+    <!-- Agent 逐条分析记录 -->
+    <div class="report-section" id="aiHistorySection" style="display:none;">
+        <h2>课中 Agent 分析记录</h2>
+        <div id="aiHistoryList"></div>
+    </div>
+
+    <a href="/" class="back-link">← 返回仪表盘</a>
+</div>
+
+<script>
+const sessionId = {{ session_id }};
+
+async function loadReport() {
+    const resp = await fetch(`/api/sessions/${sessionId}`);
+    const data = await resp.json();
+
+    if (data.error) {
+        document.getElementById('reportMeta').textContent = data.error;
+        return;
+    }
+
+    document.getElementById('reportMeta').textContent =
+        `${data.name} | ${data.start_time || '未知'}`;
+    document.getElementById('rAvgScore').textContent =
+        data.avg_attention != null ? Math.round(data.avg_attention) + '%' : '--';
+    document.getElementById('rSnapshots').textContent = data.snapshots.length;
+
+    if (data.snapshots.length > 1) {
+        const first = data.snapshots[0].elapsed_seconds;
+        const last = data.snapshots[data.snapshots.length - 1].elapsed_seconds;
+        document.getElementById('rDuration').textContent = Math.round((last - first) / 60);
+    }
+
+    // 图表
+    const labels = data.snapshots.map(s => {
+        const m = Math.floor(s.elapsed_seconds / 60);
+        const sec = s.elapsed_seconds % 60;
+        return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    });
+    const scores = data.snapshots.map(s => s.attention_score);
+
+    new Chart(document.getElementById('reportChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: '专注度 %',
+                data: scores,
+                borderColor: '#4a7fc4',
+                backgroundColor: 'rgba(74,127,196,0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7a7a7a', maxTicksLimit: 10 } },
+                y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7a7a7a' } },
+            },
+            plugins: { legend: { display: false } },
+        },
+    });
+
+    // 建议（基于前端简单分析）
+    const avgScore = scores.reduce((a,b) => a+b, 0) / scores.length;
+    const suggestions = document.getElementById('suggestions');
+    const tips = [];
+
+    if (avgScore < 60) tips.push('整体专注度偏低，建议增加课堂互动环节（提问、小组讨论、案例分析）');
+    if (avgScore >= 60 && avgScore < 80) tips.push('专注度中等，可在低谷时段穿插趣味内容或短暂休息');
+    if (avgScore >= 80) tips.push('课堂表现优秀！当前教学节奏非常好，建议保持');
+
+    // 找低谷时段
+    let minIdx = 0;
+    for (let i = 1; i < scores.length; i++) {
+        if (scores[i] < scores[minIdx]) minIdx = i;
+    }
+    if (scores.length > 5) {
+        const minTime = data.snapshots[minIdx].elapsed_seconds;
+        tips.push(`第 ${Math.floor(minTime/60)} 分钟左右专注度最低（${Math.round(scores[minIdx])}%），建议此处调整教学方式`);
+    }
+
+    tips.forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        suggestions.appendChild(li);
+    });
+}
+
+async function loadAgentHistory() {
+    try {
+        const resp = await fetch('/api/agent/history');
+        const history = await resp.json();
+        if (history.length === 0) return;
+
+        // 显示课中分析记录
+        const section = document.getElementById('aiHistorySection');
+        section.style.display = '';
+        const list = document.getElementById('aiHistoryList');
+
+        const agentNames = { student: '学生视角', teacher: '教学顾问', summary: '汇总' };
+        history.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'ai-history-item';
+            div.innerHTML = `<span class="agent-tag">${agentNames[item.agent] || item.agent}</span>` +
+                `<span class="time-tag">${item.timestamp || ''}</span>` +
+                `<p style="margin:8px 0 0;white-space:pre-wrap">${item.content}</p>`;
+            list.appendChild(div);
+        });
+
+        // 检查是否有 summary
+        const latest = await (await fetch('/api/agent/latest')).json();
+        if (latest.summary) {
+            document.getElementById('aiSection').style.display = '';
+            document.getElementById('aiSummaryContent').textContent = latest.summary;
+            document.getElementById('btnGenerateAI').style.display = 'none';
+        } else {
+            document.getElementById('aiSection').style.display = '';
+        }
+    } catch (e) { /* ignore */ }
+}
+
+async function generateAISummary() {
+    const btn = document.getElementById('btnGenerateAI');
+    btn.disabled = true;
+    document.getElementById('aiGenerating').style.display = '';
+
+    try {
+        // 连接 WebSocket 接收流式结果
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${location.host}/ws/attention`);
+        const contentEl = document.getElementById('aiSummaryContent');
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'agent_chunk' && data.agent === 'summary') {
+                contentEl.textContent += data.content;
+                document.getElementById('aiGenerating').style.display = 'none';
+            }
+            if (data.type === 'agent_done' && data.agent === 'summary') {
+                contentEl.textContent = data.content;
+                btn.style.display = 'none';
+                ws.close();
+            }
+            if (data.type === 'agent_error') {
+                contentEl.textContent = '分析失败: ' + data.error;
+                document.getElementById('aiGenerating').style.display = 'none';
+                btn.disabled = false;
+                ws.close();
+            }
+        };
+
+        ws.onopen = async () => {
+            await fetch('/api/agent/analyze', { method: 'POST' });
+        };
+    } catch (e) {
+        alert('生成失败: ' + e.message);
+        btn.disabled = false;
+        document.getElementById('aiGenerating').style.display = 'none';
+    }
+}
+
+loadReport();
+loadAgentHistory();
+</script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model weights (too large for git)
+*.pt
+
+# Logs
+*.log
+
+# Backup files
+*.bak

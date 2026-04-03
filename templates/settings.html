@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI课堂读空气 - 大模型设置</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <style>
+        .settings-container { max-width: 680px; margin: 40px auto; padding: 0 20px; }
+        .settings-header { margin-bottom: 32px; }
+        .settings-header h1 { font-size: 24px; margin-bottom: 8px; }
+        .settings-header p { color: var(--text-muted); font-size: 14px; }
+
+        .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 28px; margin-bottom: 24px; }
+        .form-card h2 { font-size: 15px; color: var(--text-muted); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 10px 14px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--bg); color: var(--text);
+            font-size: 14px; outline: none; transition: border-color 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #eef4fb; }
+        .form-group .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        .preset-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .preset-btn {
+            padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover { border-color: var(--blue); color: var(--blue); }
+        .preset-btn.active { border-color: var(--blue); background: #eef4fb; color: var(--blue); }
+
+        .toggle-group { display: flex; align-items: center; gap: 12px; }
+        .toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider {
+            position: absolute; inset: 0; background: var(--border); border-radius: 16px; transition: 0.3s;
+        }
+        .toggle .slider::before {
+            content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+            background: #fff; border-radius: 50%; transition: 0.3s;
+        }
+        .toggle input:checked + .slider { background: var(--green); }
+        .toggle input:checked + .slider::before { transform: translateX(20px); }
+
+        .btn-row { display: flex; gap: 12px; margin-top: 24px; }
+        .btn-save { background: var(--blue); color: #fff; padding: 12px 32px; border-radius: 8px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        .btn-save:hover { background: #3a6db0; }
+        .btn-test { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 12px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+        .btn-test:hover { background: #e8e5de; }
+
+        .test-result { margin-top: 12px; padding: 12px 16px; border-radius: 8px; font-size: 13px; display: none; }
+        .test-result.success { display: block; background: #edf7f0; color: var(--green); border: 1px solid #d4ede0; }
+        .test-result.error { display: block; background: #fdf0ed; color: var(--red); border: 1px solid #f0d0ca; }
+
+        .back-link { display: inline-block; margin-bottom: 20px; color: var(--blue); text-decoration: none; font-size: 14px; }
+    </style>
+    
+</head>
+<body>
+<div class="settings-container">
+    <a href="/" class="back-link">← 返回仪表盘</a>
+
+    <div class="settings-header">
+        <h2><i data-lucide="settings"></i> 系统与模型配置</h2>
+        <p>配置 AI 助教使用的大语言模型（支持所有 OpenAI 兼容端点：vLLM / DeepSeek / 智谱 / 通义千问等）</p>
+    </div>
+
+    <!-- 快速预设 -->
+    <div class="form-card">
+        <h2>快速预设</h2>
+        <div class="preset-grid" id="presetGrid"></div>
+    </div>
+
+    <!-- 连接配置 -->
+    <div class="form-card">
+        <h2>连接配置</h2>
+        <div class="toggle-group form-group">
+            <label class="toggle">
+                <input type="checkbox" id="cfgEnabled">
+                <span class="slider"></span>
+            </label>
+            <span>启用 AI 助教</span>
+        </div>
+
+        <div class="form-group">
+            <label>API 地址（Base URL）</label>
+            <input type="url" id="cfgBaseUrl" placeholder="https://api.deepseek.com/v1">
+            <div class="hint">OpenAI 兼容端点地址，如 https://api.deepseek.com/v1</div>
+        </div>
+        <div class="form-group">
+            <label>API 密钥</label>
+            <input type="password" id="cfgApiKey" placeholder="sk-...">
+            <div class="hint" id="keyHint"></div>
+        </div>
+        <div class="form-group">
+            <label>模型名称</label>
+            <input type="text" id="cfgModel" placeholder="deepseek-chat">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>最大生成长度</label>
+                <input type="number" id="cfgMaxTokens" min="100" max="4096" value="800">
+            </div>
+            <div class="form-group">
+                <label>Temperature</label>
+                <input type="number" id="cfgTemp" min="0" max="2" step="0.1" value="0.7">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>自动分析间隔（秒）</label>
+            <input type="number" id="cfgInterval" min="30" max="600" value="120">
+            <div class="hint">课堂期间 Agent 自动分析的时间间隔，建议 60-180 秒</div>
+        </div>
+    </div>
+
+    <!-- 操作 -->
+    <div class="btn-row">
+        <button class="btn-save" onclick="saveConfig()">保存配置</button>
+        <button class="btn-test" onclick="testConnection()">测试连接</button>
+    </div>
+    <div class="test-result" id="testResult"></div>
+</div>
+
+<script>
+let presets = {};
+
+async function init() {
+    // 加载预设
+    const preResp = await fetch('/api/settings/llm/presets');
+    presets = await preResp.json();
+    const grid = document.getElementById('presetGrid');
+    for (const [key, p] of Object.entries(presets)) {
+        const btn = document.createElement('button');
+        btn.className = 'preset-btn';
+        btn.textContent = p.name;
+        btn.dataset.key = key;
+        btn.onclick = () => applyPreset(key);
+        grid.appendChild(btn);
+    }
+
+    // 加载当前配置
+    const resp = await fetch('/api/settings/llm');
+    const cfg = await resp.json();
+    document.getElementById('cfgEnabled').checked = cfg.enabled;
+    document.getElementById('cfgBaseUrl').value = cfg.base_url;
+    document.getElementById('cfgModel').value = cfg.model;
+    document.getElementById('cfgMaxTokens').value = cfg.max_tokens;
+    document.getElementById('cfgTemp').value = cfg.temperature;
+    document.getElementById('cfgInterval').value = cfg.agent_interval;
+    document.getElementById('keyHint').textContent =
+        cfg.has_key ? '当前密钥: ' + cfg.api_key_masked : '尚未配置密钥';
+
+    // 高亮匹配的预设
+    for (const [key, p] of Object.entries(presets)) {
+        if (cfg.base_url === p.base_url && cfg.model === p.model) {
+            document.querySelector(`[data-key="${key}"]`)?.classList.add('active');
+        }
+    }
+}
+
+function applyPreset(key) {
+    const p = presets[key];
+    document.getElementById('cfgBaseUrl').value = p.base_url;
+    document.getElementById('cfgModel').value = p.model;
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`[data-key="${key}"]`).classList.add('active');
+}
+
+async function saveConfig() {
+    const body = {
+        enabled: document.getElementById('cfgEnabled').checked,
+        base_url: document.getElementById('cfgBaseUrl').value.trim(),
+        model: document.getElementById('cfgModel').value.trim(),
+        max_tokens: parseInt(document.getElementById('cfgMaxTokens').value),
+        temperature: parseFloat(document.getElementById('cfgTemp').value),
+        agent_interval: parseInt(document.getElementById('cfgInterval').value),
+    };
+    const keyInput = document.getElementById('cfgApiKey').value.trim();
+    if (keyInput) body.api_key = keyInput;
+
+    const resp = await fetch('/api/settings/llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+        alert('配置已保存');
+        location.reload();
+    } else {
+        alert('保存失败');
+    }
+}
+
+async function testConnection() {
+    const result = document.getElementById('testResult');
+    result.className = 'test-result';
+    result.style.display = 'block';
+    result.textContent = '测试中...';
+    result.style.background = 'var(--bg)';
+    result.style.color = 'var(--text-muted)';
+
+    // 先保存当前输入（密钥可能是新的）
+    const keyInput = document.getElementById('cfgApiKey').value.trim();
+    if (keyInput) {
+        await fetch('/api/settings/llm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                base_url: document.getElementById('cfgBaseUrl').value.trim(),
+                api_key: keyInput,
+                model: document.getElementById('cfgModel').value.trim(),
+            }),
+        });
+    }
+
+    const resp = await fetch('/api/settings/llm/test', { method: 'POST' });
+    const data = await resp.json();
+    if (data.success) {
+        result.className = 'test-result success';
+        result.textContent = '连接成功！模型回复: ' + data.response;
+    } else {
+        result.className = 'test-result error';
+        result.textContent = '连接失败: ' + data.error;
+    }
+}
+
+init();
+</script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>
