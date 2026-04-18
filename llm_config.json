@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-  "api_key": "enc:v1:xdnAXBS8Ixz1YoHyGL3UtEwLvMy5aNdkP0xo93TDXJUvBnIAqDbqQOi_Rz45FiXBo0nFJzsQRdvcxykAIOQn",
+  "api_key": "enc:v1:a2p1K0Kq5wW6NWxbszVWJPW1jDePUiqticgkSPV8-O7T3w5if3L0HLx39zAmppvH4f20LTF5EFD_3xObNe4Z",
   "model": "qwen-turbo",
   "max_tokens": 800,
   "temperature": 0.7,

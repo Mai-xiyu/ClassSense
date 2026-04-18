@@ -3,8 +3,11 @@
 
 import asyncio
 from fastapi import APIRouter
+from sqlalchemy import select
 from app.agents.manager import agent_manager
 from app.llm.client import is_configured, has_credentials
+from app.database import async_session
+from app.models import AgentInsight
 from app import runtime_config
 
 router = APIRouter(prefix="/api/agent")
@@ -33,15 +36,48 @@ async def agent_status():
 
 
 @router.get("/latest")
-async def agent_latest():
-    """获取最新的 Agent 分析结果"""
-    return agent_manager.latest
+async def agent_latest(session_id: int | None = None):
+    """获取最新的 Agent 分析结果。传 session_id 时从 DB 读，避免跨课串。"""
+    if session_id is None:
+        return agent_manager.latest
+    async with async_session() as db:
+        result = {"student": None, "teacher": None, "summary": None}
+        for agent in result.keys():
+            stmt = (
+                select(AgentInsight)
+                .where(AgentInsight.session_id == session_id, AgentInsight.agent == agent)
+                .order_by(AgentInsight.timestamp.desc())
+                .limit(1)
+            )
+            row = (await db.execute(stmt)).scalar_one_or_none()
+            if row is not None:
+                result[agent] = row.content
+        return result
 
 
 @router.get("/history")
-async def agent_history():
-    """获取本次课堂所有 Agent 分析历史"""
-    return agent_manager.history
+async def agent_history(session_id: int | None = None):
+    """获取指定课堂的 Agent 分析历史。不传 session_id 则返回当前进行中课堂的内存记录。"""
+    if session_id is None:
+        return agent_manager.history
+    async with async_session() as db:
+        stmt = (
+            select(AgentInsight)
+            .where(AgentInsight.session_id == session_id)
+            .order_by(AgentInsight.timestamp.asc())
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        return [
+            {
+                "agent": r.agent,
+                "content": r.content,
+                "elapsed": r.elapsed_seconds,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else "",
+                "prompt_system": r.prompt_system,
+                "prompt_user": r.prompt_user,
+            }
+            for r in rows
+        ]
 
 
 @router.post("/analyze")

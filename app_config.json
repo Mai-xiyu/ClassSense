@@ -6,5 +6,5 @@
   "behavior_stability_frames": 2,
   "tracker_iou_threshold": 0.2,
   "camera_scan_limit": 6,
-  "privacy_mode": true
+  "privacy_mode": false
 }

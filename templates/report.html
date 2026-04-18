@@ -186,7 +186,7 @@ async function loadReport() {
 
 async function loadAgentHistory() {
     try {
-        const resp = await fetch('/api/agent/history');
+        const resp = await fetch(`/api/agent/history?session_id=${sessionId}`);
         const history = await resp.json();
         if (history.length === 0) return;
 
@@ -206,7 +206,7 @@ async function loadAgentHistory() {
         });
 
         // 检查是否有 summary
-        const latest = await (await fetch('/api/agent/latest')).json();
+        const latest = await (await fetch(`/api/agent/latest?session_id=${sessionId}`)).json();
         if (latest.summary) {
             document.getElementById('aiSection').style.display = '';
             document.getElementById('aiSummaryContent').textContent = latest.summary;

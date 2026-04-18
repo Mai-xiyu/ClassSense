@@ -19,6 +19,24 @@ class ClassSession(Base):
     avg_attention = Column(Float, nullable=True)
 
     snapshots = relationship("AttentionSnapshot", back_populates="session", cascade="all, delete-orphan")
+    insights = relationship("AgentInsight", back_populates="session", cascade="all, delete-orphan")
+
+
+class AgentInsight(Base):
+    """每条 AI Agent 分析记录（per-session 持久化，避免跨课串内容）"""
+    __tablename__ = "agent_insights"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("class_sessions.id"), nullable=False, index=True)
+    agent = Column(String(32), nullable=False)  # student / teacher / summary
+    content = Column(String, nullable=False)
+    elapsed_seconds = Column(Integer, default=0)
+    timestamp = Column(DateTime, default=datetime.now)
+    # 可解释性快照
+    prompt_system = Column(String, nullable=True)
+    prompt_user = Column(String, nullable=True)
+
+    session = relationship("ClassSession", back_populates="insights")
 
 
 class AttentionSnapshot(Base):

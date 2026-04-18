@@ -9,6 +9,8 @@ from datetime import datetime
 from app.llm.client import llm_client, load_config, is_configured
 from app.agents.prompts import STUDENT_SYSTEM, TEACHER_SYSTEM, SUMMARY_SYSTEM
 from app.routers import websocket as ws_router
+from app.database import async_session
+from app.models import AgentInsight
 
 # 行为中文映射
 _BEH_CN = {
@@ -138,6 +140,7 @@ class AgentManager:
                 "prompt_system": SUMMARY_SYSTEM,
                 "prompt_user": user_msg,
             })
+            await self._persist("summary", full_text, SUMMARY_SYSTEM, user_msg, elapsed=0)
             return full_text
         except Exception as e:
             err = f"汇总分析失败: {e}"
@@ -165,19 +168,41 @@ class AgentManager:
                 "agent": agent_name,
                 "content": full_text,
             })
+            elapsed = self._recent_data[-1].get("elapsed_seconds", 0) if self._recent_data else 0
             self.latest[agent_name] = full_text
             self.history.append({
                 "agent": agent_name,
                 "content": full_text,
-                "elapsed": self._recent_data[-1].get("elapsed_seconds", 0) if self._recent_data else 0,
+                "elapsed": elapsed,
                 "timestamp": datetime.now().isoformat(),
                 # 可解释性快照：每条 AI 评论都带上系统/用户 prompt，便于质询时复盘
                 "prompt_system": system_prompt,
                 "prompt_user": user_msg,
             })
+            await self._persist(agent_name, full_text, system_prompt, user_msg, elapsed)
         except Exception as e:
             err = f"{agent_name} 分析失败: {e}"
             await ws_router.broadcast({"type": "agent_error", "agent": agent_name, "error": err})
+
+    # ---------- 持久化 ----------
+
+    async def _persist(self, agent: str, content: str, sys_prompt: str, user_prompt: str, elapsed: int):
+        """写入 DB。按 session_id 隔离，避免跨课串内容。"""
+        if self._session_id is None:
+            return
+        try:
+            async with async_session() as db:
+                db.add(AgentInsight(
+                    session_id=self._session_id,
+                    agent=agent,
+                    content=content,
+                    elapsed_seconds=elapsed,
+                    prompt_system=sys_prompt,
+                    prompt_user=user_prompt,
+                ))
+                await db.commit()
+        except Exception as e:
+            print(f"[Agent] 持久化 insight 失败: {e}")
 
     # ---------- 上下文构建 ----------
 
