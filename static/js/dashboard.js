@@ -639,11 +639,23 @@ async function checkAgentStatus() {
     try {
         const resp = await fetch('/api/agent/status');
         const data = await resp.json();
-        if (!data.configured) {
-            document.getElementById('agentStatusBar').innerHTML =
+        if (data.configured) return;
+
+        const bar = document.getElementById('agentStatusBar');
+        if (data.privacy_mode) {
+            // 凭据齐全但被隐私模式阻断 —— 不要误导用户去"配置大模型"
+            bar.innerHTML =
+                '<span style="color:var(--red)">隐私模式运行中，AI 助教已临时禁用。' +
+                '可在 <a href="/settings" style="color:var(--red);text-decoration:underline">系统设置</a> 中关闭。</span>';
+        } else if (!data.has_credentials) {
+            bar.innerHTML =
                 '<span><a href="/settings" style="color:var(--purple)">配置大模型</a> 后即可启用 AI 助教分析</span>';
-            document.getElementById('btnAnalyze').style.display = 'none';
+        } else {
+            // 凭据齐全但 enabled=false 等其他情况
+            bar.innerHTML =
+                '<span>AI 助教未启用，请在 <a href="/settings" style="color:var(--purple)">设置</a> 中开启"启用 AI 助教"开关</span>';
         }
+        document.getElementById('btnAnalyze').style.display = 'none';
     } catch (e) { /* ignore */ }
 }
 checkAgentStatus();
