@@ -1,0 +1,9 @@
+{
+  "cameras": [
+    0
+  ],
+  "debug_preview_enabled": true,
+  "behavior_stability_frames": 2,
+  "tracker_iou_threshold": 0.2,
+  "camera_scan_limit": 6
+}

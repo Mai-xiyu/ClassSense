@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """REST API路由"""
 
+import asyncio
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -104,3 +106,72 @@ async def get_current_status():
     if tracker is None:
         return {"status": "not_running"}
     return tracker.get_current()
+
+
+@router.get("/debug/frame")
+async def get_debug_frame():
+    """返回当前检测线程生成的调试画面。"""
+    from app.main import tracker, _is_class_active
+    from app import runtime_config
+
+    if tracker is None or not _is_class_active:
+        return Response(status_code=204)
+
+    if not runtime_config.is_debug_enabled():
+        return Response(status_code=204)
+
+    frame = tracker.get_debug_frame()
+    if not frame:
+        return Response(status_code=204)
+
+    current = tracker.get_current()
+    return Response(
+        content=frame,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "X-Debug-Total-People": str(current.get("total_people", 0)),
+        },
+    )
+
+
+@router.get("/debug/stream")
+async def stream_debug_frames():
+    """以 MJPEG (multipart/x-mixed-replace) 持续推送调试画面，
+    由浏览器原生解码，帧率接近摄像头原生帧率。"""
+    from app.main import tracker as _tracker_ref
+    from app import runtime_config
+
+    boundary = "frame"
+
+    async def generator():
+        loop = asyncio.get_running_loop()
+        # 目标 ~30 FPS；摄像头给不到就自然降
+        interval = 1.0 / 30.0
+        while True:
+            from app.main import tracker, _is_class_active
+
+            if tracker is None or not _is_class_active or not runtime_config.is_debug_enabled():
+                await asyncio.sleep(0.2)
+                continue
+
+            frame = await loop.run_in_executor(None, tracker.get_debug_frame)
+            if frame:
+                yield (
+                    b"--" + boundary.encode() + b"\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
+                    + frame + b"\r\n"
+                )
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(
+        generator(),
+        media_type="multipart/x-mixed-replace; boundary=" + boundary,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

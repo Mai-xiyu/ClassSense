@@ -7,15 +7,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v={{ asset_version }}">
     <style>
-        .settings-container { max-width: 680px; margin: 40px auto; padding: 0 20px; }
+        .settings-container { max-width: 720px; margin: 40px auto; padding: 0 20px; }
         .settings-header { margin-bottom: 32px; }
         .settings-header h1 { font-size: 24px; margin-bottom: 8px; }
         .settings-header p { color: var(--text-muted); font-size: 14px; }
 
         .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 28px; margin-bottom: 24px; }
-        .form-card h2 { font-size: 15px; color: var(--text-muted); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-card h2 { font-size: 15px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-card .card-desc { font-size: 13px; color: var(--text-muted); margin: -2px 0 18px; }
 
         .form-group { margin-bottom: 18px; }
         .form-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
@@ -28,17 +29,20 @@
         .form-group .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-        .preset-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .preset-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
         .preset-btn {
             padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
             background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer;
             transition: all 0.2s;
         }
-        .preset-btn:hover { border-color: var(--blue); color: var(--blue); }
+        .preset-btn:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); }
         .preset-btn.active { border-color: var(--blue); background: #eef4fb; color: var(--blue); }
 
         .toggle-group { display: flex; align-items: center; gap: 12px; }
-        .toggle { position: relative; width: 44px; height: 24px; cursor: pointer; }
+        .toggle-group .toggle-label { flex: 1; }
+        .toggle-group .toggle-label strong { display: block; font-size: 14px; color: var(--text); }
+        .toggle-group .toggle-label span { font-size: 12px; color: var(--text-muted); }
+        .toggle { position: relative; width: 44px; height: 24px; cursor: pointer; flex-shrink: 0; }
         .toggle input { opacity: 0; width: 0; height: 0; }
         .toggle .slider {
             position: absolute; inset: 0; background: var(--border); border-radius: 16px; transition: 0.3s;
@@ -50,44 +54,145 @@
         .toggle input:checked + .slider { background: var(--green); }
         .toggle input:checked + .slider::before { transform: translateX(20px); }
 
-        .btn-row { display: flex; gap: 12px; margin-top: 24px; }
-        .btn-save { background: var(--blue); color: #fff; padding: 12px 32px; border-radius: 8px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-        .btn-save:hover { background: #3a6db0; }
-        .btn-test { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 12px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
-        .btn-test:hover { background: #e8e5de; }
+        /* 摄像头列表 */
+        .camera-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+        .btn-pill {
+            padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-pill:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); }
+        .btn-pill.is-loading { opacity: 0.6; pointer-events: none; }
+        .btn-pill i { width: 14px; height: 14px; }
+        .mode-chip { font-size: 12px; color: var(--text-muted); }
+        .mode-chip strong { color: var(--text); }
+
+        .camera-list { display: grid; gap: 10px; }
+        .camera-item {
+            display: flex; align-items: center; gap: 14px;
+            padding: 12px 14px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--bg);
+            transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+        }
+        .camera-item:hover { border-color: var(--blue); transform: translateY(-1px); }
+        .camera-item.is-selected { border-color: var(--blue); background: #eef4fb; }
+        .camera-item input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--blue); }
+        .camera-item .cam-label { flex: 1; font-size: 14px; font-weight: 500; }
+        .camera-item .cam-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #eef4fb; color: var(--blue); }
+        .camera-empty { font-size: 13px; color: var(--text-muted); padding: 18px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+
+        /* 操作按钮 —— 默认中性，hover 才高亮（三个按钮字体和默认色一致） */
+        .btn-row { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+        .btn-base {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 26px; border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg); color: var(--text);
+            font-size: 14px; font-weight: 600; font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-base i { width: 16px; height: 16px; }
+        .btn-base:active { transform: translateY(0); }
+        .btn-base:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+        /* hover 才区分颜色 */
+        .btn-primary-v2:hover { background: var(--blue); border-color: var(--blue); color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(74,109,176,0.25); }
+        .btn-secondary-v2:hover { background: #edf7f0; border-color: var(--green); color: var(--green); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+        .btn-ghost-v2:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); }
 
         .test-result { margin-top: 12px; padding: 12px 16px; border-radius: 8px; font-size: 13px; display: none; }
         .test-result.success { display: block; background: #edf7f0; color: var(--green); border: 1px solid #d4ede0; }
         .test-result.error { display: block; background: #fdf0ed; color: var(--red); border: 1px solid #f0d0ca; }
+        .test-result.info { display: block; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
 
         .back-link { display: inline-block; margin-bottom: 20px; color: var(--blue); text-decoration: none; font-size: 14px; }
+        .back-link:hover { text-decoration: underline; }
+
+        .section-title { display: flex; align-items: center; gap: 8px; }
+        .section-title i { width: 16px; height: 16px; color: var(--text-muted); }
     </style>
     
 </head>
 <body>
 <div class="settings-container">
-    <a href="/" class="back-link">← 返回仪表盘</a>
-
     <div class="settings-header">
         <h2><i data-lucide="settings"></i> 系统与模型配置</h2>
-        <p>配置 AI 助教使用的大语言模型（支持所有 OpenAI 兼容端点：vLLM / DeepSeek / 智谱 / 通义千问等）</p>
+        <p>管理摄像头、调试选项和 AI 助教大语言模型（支持所有 OpenAI 兼容端点）</p>
+    </div>
+
+    <!-- 摄像头管理 -->
+    <div class="form-card">
+        <h2 class="section-title"><i data-lucide="camera"></i> 摄像头</h2>
+        <p class="card-desc">支持单摄像头或多摄像头并用。多路启用时各路独立检测并累加计数，请确保各摄像头覆盖不重叠区域以避免重复计数。</p>
+
+        <div class="camera-actions">
+            <button type="button" class="btn-pill" id="btnScanCameras" onclick="scanCameras()">
+                <i data-lucide="refresh-cw"></i> <span>扫描可用摄像头</span>
+            </button>
+            <button type="button" class="btn-pill" onclick="selectAllCameras()">
+                <i data-lucide="check-check"></i> <span>全部选中</span>
+            </button>
+            <button type="button" class="btn-pill" onclick="selectSingleCamera()">
+                <i data-lucide="focus"></i> <span>单路模式（仅首个）</span>
+            </button>
+            <span class="mode-chip" id="cameraModeChip">当前：—</span>
+        </div>
+
+        <div class="camera-list" id="cameraList">
+            <div class="camera-empty">点击「扫描可用摄像头」检测设备</div>
+        </div>
+    </div>
+
+    <!-- 调试与检测精度 -->
+    <div class="form-card">
+        <h2 class="section-title"><i data-lucide="bug"></i> 调试与检测精度</h2>
+        <p class="card-desc">开启调试画面可在仪表盘实时查看 YOLO 捕捉到的人体框；行为平滑帧数越大越不易抖动但延迟越高。</p>
+
+        <div class="toggle-group form-group">
+            <label class="toggle">
+                <input type="checkbox" id="cfgDebugPreview">
+                <span class="slider"></span>
+            </label>
+            <div class="toggle-label">
+                <strong>显示调试画面</strong>
+                <span>仪表盘右侧将出现实时调试预览卡（保存后刷新仪表盘生效）</span>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>行为平滑帧数</label>
+                <input type="number" id="cfgStabilityFrames" min="1" max="15" value="4">
+                <div class="hint">同一人连续 N 帧判定为新行为才切换，推荐 3-6</div>
+            </div>
+            <div class="form-group">
+                <label>跨帧追踪 IoU 阈值</label>
+                <input type="number" id="cfgIou" min="0.1" max="0.9" step="0.05" value="0.35">
+                <div class="hint">越高要求框重合越多才判为同一人，推荐 0.3-0.45</div>
+            </div>
+        </div>
     </div>
 
     <!-- 快速预设 -->
     <div class="form-card">
-        <h2>快速预设</h2>
+        <h2 class="section-title"><i data-lucide="zap"></i> 大模型快速预设</h2>
+        <p class="card-desc">点击即可填入对应服务商的默认 API 地址与模型名。</p>
         <div class="preset-grid" id="presetGrid"></div>
     </div>
 
     <!-- 连接配置 -->
     <div class="form-card">
-        <h2>连接配置</h2>
+        <h2 class="section-title"><i data-lucide="plug"></i> 连接配置</h2>
         <div class="toggle-group form-group">
             <label class="toggle">
                 <input type="checkbox" id="cfgEnabled">
                 <span class="slider"></span>
             </label>
-            <span>启用 AI 助教</span>
+            <div class="toggle-label">
+                <strong>启用 AI 助教</strong>
+                <span>关闭后仪表盘不会调用大模型做课堂分析</span>
+            </div>
         </div>
 
         <div class="form-group">
@@ -124,14 +229,23 @@
 
     <!-- 操作 -->
     <div class="btn-row">
-        <button class="btn-save" onclick="saveConfig()">保存配置</button>
-        <button class="btn-test" onclick="testConnection()">测试连接</button>
+        <button class="btn-base btn-primary-v2" onclick="saveConfig()">
+            <i data-lucide="save"></i> <span>保存全部设置</span>
+        </button>
+        <button class="btn-base btn-secondary-v2" onclick="testConnection()">
+            <i data-lucide="activity"></i> <span>测试大模型连接</span>
+        </button>
+        <button class="btn-base btn-ghost-v2" onclick="location.href='/'">
+            <i data-lucide="arrow-left"></i> <span>返回仪表盘</span>
+        </button>
     </div>
     <div class="test-result" id="testResult"></div>
 </div>
 
 <script>
 let presets = {};
+let availableCameras = [];
+let selectedCameras = [];
 
 async function init() {
     // 加载预设
@@ -140,6 +254,7 @@ async function init() {
     const grid = document.getElementById('presetGrid');
     for (const [key, p] of Object.entries(presets)) {
         const btn = document.createElement('button');
+        btn.type = 'button';
         btn.className = 'preset-btn';
         btn.textContent = p.name;
         btn.dataset.key = key;
@@ -147,7 +262,7 @@ async function init() {
         grid.appendChild(btn);
     }
 
-    // 加载当前配置
+    // 加载 LLM 配置
     const resp = await fetch('/api/settings/llm');
     const cfg = await resp.json();
     document.getElementById('cfgEnabled').checked = cfg.enabled;
@@ -158,12 +273,99 @@ async function init() {
     document.getElementById('cfgInterval').value = cfg.agent_interval;
     document.getElementById('keyHint').textContent =
         cfg.has_key ? '当前密钥: ' + cfg.api_key_masked : '尚未配置密钥';
-
-    // 高亮匹配的预设
     for (const [key, p] of Object.entries(presets)) {
         if (cfg.base_url === p.base_url && cfg.model === p.model) {
             document.querySelector(`[data-key="${key}"]`)?.classList.add('active');
         }
+    }
+
+    // 加载 App（摄像头/调试）配置
+    const appResp = await fetch('/api/settings/app');
+    const appCfg = await appResp.json();
+    document.getElementById('cfgDebugPreview').checked = !!appCfg.debug_preview_enabled;
+    document.getElementById('cfgStabilityFrames').value = appCfg.behavior_stability_frames;
+    document.getElementById('cfgIou').value = appCfg.tracker_iou_threshold;
+    selectedCameras = appCfg.cameras.slice();
+    renderCameras();
+
+    // 后台扫描一次，取真正可用的列表
+    scanCameras(true);
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function updateModeChip() {
+    const chip = document.getElementById('cameraModeChip');
+    if (!selectedCameras.length) {
+        chip.innerHTML = '当前：<strong>未选择</strong>';
+    } else if (selectedCameras.length === 1) {
+        chip.innerHTML = `当前：<strong>单摄像头模式</strong>（#${selectedCameras[0]}）`;
+    } else {
+        chip.innerHTML = `当前：<strong>多摄像头并用</strong>（${selectedCameras.join(', ')}）`;
+    }
+}
+
+function renderCameras() {
+    const list = document.getElementById('cameraList');
+    const items = availableCameras.length
+        ? availableCameras
+        : selectedCameras.map(i => ({ index: i, label: `摄像头 ${i}` }));
+
+    if (!items.length) {
+        list.innerHTML = '<div class="camera-empty">未检测到任何摄像头，请检查设备连接</div>';
+        updateModeChip();
+        return;
+    }
+
+    list.innerHTML = items.map(cam => {
+        const checked = selectedCameras.includes(cam.index);
+        return `
+            <label class="camera-item ${checked ? 'is-selected' : ''}">
+                <input type="checkbox" value="${cam.index}" ${checked ? 'checked' : ''} onchange="toggleCamera(${cam.index}, this.checked)">
+                <span class="cam-label">${cam.label}</span>
+                ${checked ? '<span class="cam-badge">启用</span>' : ''}
+            </label>
+        `;
+    }).join('');
+    updateModeChip();
+}
+
+function toggleCamera(index, checked) {
+    if (checked) {
+        if (!selectedCameras.includes(index)) selectedCameras.push(index);
+    } else {
+        selectedCameras = selectedCameras.filter(i => i !== index);
+    }
+    selectedCameras.sort((a, b) => a - b);
+    renderCameras();
+}
+
+function selectAllCameras() {
+    if (!availableCameras.length) return;
+    selectedCameras = availableCameras.map(c => c.index);
+    renderCameras();
+}
+
+function selectSingleCamera() {
+    const base = availableCameras.length ? availableCameras : selectedCameras.map(i => ({ index: i }));
+    if (!base.length) return;
+    selectedCameras = [base[0].index];
+    renderCameras();
+}
+
+async function scanCameras(silent = false) {
+    const btn = document.getElementById('btnScanCameras');
+    btn.classList.add('is-loading');
+    try {
+        const resp = await fetch('/api/settings/cameras/scan');
+        const data = await resp.json();
+        availableCameras = data.available || [];
+        if (!silent) showResult('info', `扫描完成，可用摄像头: ${availableCameras.map(c => c.index).join(', ') || '无'}`);
+        renderCameras();
+    } catch (e) {
+        if (!silent) showResult('error', '扫描失败: ' + e.message);
+    } finally {
+        btn.classList.remove('is-loading');
     }
 }
 
@@ -175,8 +377,15 @@ function applyPreset(key) {
     document.querySelector(`[data-key="${key}"]`).classList.add('active');
 }
 
+function showResult(kind, message) {
+    const result = document.getElementById('testResult');
+    result.className = 'test-result ' + kind;
+    result.textContent = message;
+}
+
 async function saveConfig() {
-    const body = {
+    // 1. 保存 LLM
+    const llmBody = {
         enabled: document.getElementById('cfgEnabled').checked,
         base_url: document.getElementById('cfgBaseUrl').value.trim(),
         model: document.getElementById('cfgModel').value.trim(),
@@ -185,31 +394,54 @@ async function saveConfig() {
         agent_interval: parseInt(document.getElementById('cfgInterval').value),
     };
     const keyInput = document.getElementById('cfgApiKey').value.trim();
-    if (keyInput) body.api_key = keyInput;
+    if (keyInput) llmBody.api_key = keyInput;
 
-    const resp = await fetch('/api/settings/llm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    });
-    const data = await resp.json();
-    if (data.ok) {
-        alert('配置已保存');
-        location.reload();
-    } else {
-        alert('保存失败');
+    // 2. 保存 App（摄像头/调试）
+    if (!selectedCameras.length) {
+        showResult('error', '请至少选择一个摄像头');
+        return;
+    }
+    const appBody = {
+        cameras: selectedCameras,
+        debug_preview_enabled: document.getElementById('cfgDebugPreview').checked,
+        behavior_stability_frames: parseInt(document.getElementById('cfgStabilityFrames').value),
+        tracker_iou_threshold: parseFloat(document.getElementById('cfgIou').value),
+    };
+
+    try {
+        const [llmResp, appResp] = await Promise.all([
+            fetch('/api/settings/llm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(llmBody),
+            }),
+            fetch('/api/settings/app', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(appBody),
+            }),
+        ]);
+        const appData = await appResp.json();
+        if (!llmResp.ok || !appResp.ok) throw new Error('保存失败');
+
+        if (appData.requires_restart) {
+            showResult('success', '配置已保存。摄像头变更需要「结束课程并重新开始」才会生效。');
+        } else {
+            showResult('success', '配置已保存。');
+        }
+        // 清空密码框并刷新摘要
+        document.getElementById('cfgApiKey').value = '';
+        const newLlm = await (await fetch('/api/settings/llm')).json();
+        document.getElementById('keyHint').textContent =
+            newLlm.has_key ? '当前密钥: ' + newLlm.api_key_masked : '尚未配置密钥';
+    } catch (e) {
+        showResult('error', '保存失败: ' + e.message);
     }
 }
 
 async function testConnection() {
-    const result = document.getElementById('testResult');
-    result.className = 'test-result';
-    result.style.display = 'block';
-    result.textContent = '测试中...';
-    result.style.background = 'var(--bg)';
-    result.style.color = 'var(--text-muted)';
+    showResult('info', '测试中...');
 
-    // 先保存当前输入（密钥可能是新的）
     const keyInput = document.getElementById('cfgApiKey').value.trim();
     if (keyInput) {
         await fetch('/api/settings/llm', {
@@ -226,11 +458,9 @@ async function testConnection() {
     const resp = await fetch('/api/settings/llm/test', { method: 'POST' });
     const data = await resp.json();
     if (data.success) {
-        result.className = 'test-result success';
-        result.textContent = '连接成功！模型回复: ' + data.response;
+        showResult('success', '连接成功！模型回复: ' + data.response);
     } else {
-        result.className = 'test-result error';
-        result.textContent = '连接失败: ' + data.error;
+        showResult('error', '连接失败: ' + data.error);
     }
 }
 

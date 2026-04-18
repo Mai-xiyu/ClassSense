@@ -7,11 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css?v={{ asset_version }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     
 </head>
-<body>
+<body data-debug-preview-enabled="{{ '1' if debug_preview_enabled else '0' }}">
 
 <!-- 顶部导航 -->
 <header class="topbar fade-in">
@@ -113,6 +113,20 @@
             </div>
         </div>
 
+        <div class="card debug-card slide-up-stagger-2" id="debugCard">
+            <div class="card-header-flex">
+                <div class="card-title m-0">
+                    <i data-lucide="camera"></i> 调试画面
+                </div>
+                <span class="debug-status" id="debugFrameStatus">未开始检测</span>
+            </div>
+            <div class="debug-frame-shell">
+                <img class="debug-frame" id="debugFrameImage" alt="YOLO 调试画面">
+                <div class="debug-empty" id="debugFrameEmpty">开始检测后显示调试画面</div>
+            </div>
+            <p class="debug-caption">显示当前进入分析流程的人体框与关键点，用来检查 YOLO 漏检、误检和取景范围。可在 <a href="/settings">系统设置</a> 中关闭本面板。</p>
+        </div>
+
         <div class="row-bottom slide-up-stagger-2">
             <!-- AI 助教分析面板 -->
             <div class="card agent-panel-card" id="agentPanel">
@@ -183,7 +197,7 @@
     </div>
 </div>
 
-<script src="/static/js/dashboard.js"></script>
+<script src="/static/js/dashboard.js?v={{ asset_version }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
 <script>lucide.createIcons();</script>
 </body>

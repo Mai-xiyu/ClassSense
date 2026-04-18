@@ -11,8 +11,11 @@ let currentSessionId = null;
 let timelineData = { labels: [], scores: [] };
 let eventLog = [];
 let hasLoggedDataArrival = false;
+let debugFrameTimer = null;
+let debugFrameRequestInFlight = false;
 const MAX_TIMELINE_POINTS = 300;
 const MAX_LOG_ITEMS = 50;
+const DEBUG_FRAME_INTERVAL_MS = 100;
 
 // 行为颜色映射
 const BEHAVIOR_COLORS = {
@@ -32,6 +35,8 @@ const BEHAVIOR_CN = {
 
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', async () => {
+    initDebugPreview();
+
     // 检查是否有进行中的课堂
     const resp = await fetch('/api/status');
     const status = await resp.json();
@@ -42,6 +47,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     connectWebSocket();
 });
+
+function leaveClassMode(message = '未开始检测') {
+    classActive = false;
+    currentSessionId = null;
+    stopDebugPreview(message);
+    document.getElementById('startOverlay').style.display = '';
+    document.getElementById('mainContent').style.display = 'none';
+    document.getElementById('bottomBar').style.display = 'none';
+    document.getElementById('statusDot').classList.remove('active');
+    document.getElementById('statusText').textContent = '待开始';
+}
+
+async function syncClassStatus() {
+    try {
+        const resp = await fetch('/api/status', { cache: 'no-store' });
+        const status = await resp.json();
+
+        if (!status.is_active && classActive) {
+            leaveClassMode('服务已重启，请重新开始课程');
+            return;
+        }
+
+        if (status.is_active && !classActive) {
+            classActive = true;
+            currentSessionId = status.session_id;
+            enterClassMode();
+        }
+    } catch (e) {
+        // ignore status sync failures; WebSocket reconnect covers transient errors
+    }
+}
 
 // ===== 上课/下课控制 =====
 async function startClass() {
@@ -96,6 +132,8 @@ async function stopClass() {
             btn.textContent = '结束课程';
             return;
         }
+        classActive = false;
+        stopDebugPreview('调试已停止');
         // 跳转到课后报告
         window.location.href = `/report/${data.session_id}`;
     } catch (e) {
@@ -124,6 +162,8 @@ function enterClassMode(isFreshStart = false) {
     } else {
         addLog(0, '已进入进行中的课堂', '#2563eb');
     }
+
+    startDebugPreview();
 }
 
 // ===== 历史记录 =====
@@ -179,8 +219,9 @@ function connectWebSocket() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${location.host}/ws/attention`);
 
-    ws.onopen = () => {
+    ws.onopen = async () => {
         isRunning = true;
+        await syncClassStatus();
         if (classActive) {
             document.getElementById('statusDot').classList.add('active');
             document.getElementById('statusText').textContent = '检测中';
@@ -233,6 +274,14 @@ function connectWebSocket() {
 
 // ===== 更新仪表盘 =====
 function updateDashboard(data) {
+    if (isDebugEnabled() && classActive) {
+        const image = document.getElementById('debugFrameImage');
+        // 只在流还没建立时重启，避免每条 WS 消息都重置 src
+        if (image && !image.getAttribute('src')) {
+            startDebugPreview();
+        }
+    }
+
     const score = data.smoothed_score || 0;
     const total = data.total_people || 0;
     const behaviors = data.behavior_counts || {};
@@ -261,6 +310,64 @@ function updateDashboard(data) {
 
     // 5. 检测事件并记录日志
     checkEvents(data);
+}
+
+// ===== 调试画面 =====
+function isDebugEnabled() {
+    return document.body?.dataset.debugPreviewEnabled === '1';
+}
+
+function initDebugPreview() {
+    const card = document.getElementById('debugCard');
+    if (card) {
+        card.style.display = isDebugEnabled() ? '' : 'none';
+    }
+    if (!isDebugEnabled()) return;
+    setDebugPreviewState(false, '未开始检测');
+}
+
+function setDebugPreviewState(isLive, message) {
+    if (!isDebugEnabled()) return;
+    const status = document.getElementById('debugFrameStatus');
+    const image = document.getElementById('debugFrameImage');
+    const empty = document.getElementById('debugFrameEmpty');
+    if (!status || !image || !empty) return;
+
+    status.textContent = message;
+    image.classList.toggle('is-live', isLive);
+    empty.classList.toggle('is-hidden', isLive);
+    if (!isLive) {
+        empty.textContent = message === '未开始检测' ? '开始检测后显示调试画面' : message;
+    }
+}
+
+function startDebugPreview() {
+    if (!isDebugEnabled()) return;
+    const image = document.getElementById('debugFrameImage');
+    if (!image) return;
+    setDebugPreviewState(false, '连接实时流…');
+    // 直接用浏览器原生 multipart/x-mixed-replace 解码，帧率贴近摄像头原生
+    image.onload = () => setDebugPreviewState(true, '实时预览');
+    image.onerror = () => setDebugPreviewState(false, classActive ? '调试流断开' : '未开始检测');
+    image.src = `/api/debug/stream?t=${Date.now()}`;
+}
+
+function stopDebugPreview(message = '未开始检测') {
+    if (debugFrameTimer) {
+        clearInterval(debugFrameTimer);
+        debugFrameTimer = null;
+    }
+    debugFrameRequestInFlight = false;
+
+    if (!isDebugEnabled()) return;
+
+    const image = document.getElementById('debugFrameImage');
+    if (!image) return;
+    // 断开 MJPEG 流
+    image.onload = null;
+    image.onerror = null;
+    image.removeAttribute('src');
+    setDebugPreviewState(false, message);
 }
 
 // ===== 专注度环形 =====

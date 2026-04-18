@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """LLM 设置 API"""
 
+import os
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 from app.llm.client import load_config, save_config, llm_client
+from app import runtime_config
 
 router = APIRouter(prefix="/api/settings")
 
@@ -108,3 +111,93 @@ PRESETS = {
 async def get_presets():
     """获取预设模型列表"""
     return PRESETS
+
+
+# ==========================================================================
+# 运行时应用配置（摄像头选择 / 调试预览开关 / 行为平滑）
+# ==========================================================================
+
+
+class AppConfigUpdate(BaseModel):
+    cameras: Optional[List[int]] = None
+    debug_preview_enabled: Optional[bool] = None
+    behavior_stability_frames: Optional[int] = None
+    tracker_iou_threshold: Optional[float] = None
+
+
+@router.get("/app")
+async def get_app_config():
+    """获取运行时应用配置。"""
+    cfg = runtime_config.load()
+    return cfg
+
+
+@router.post("/app")
+async def update_app_config(body: AppConfigUpdate):
+    """更新运行时应用配置，并在运行中立即热更新调试开关与(可能的)摄像头选择提示。"""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    cfg = runtime_config.save(updates)
+
+    # 调试开关可以热切换到当前 tracker
+    from app.main import tracker
+    if tracker is not None and "debug_preview_enabled" in updates:
+        tracker.set_debug_enabled(cfg["debug_preview_enabled"])
+
+    # 摄像头变更需要重启课堂才生效，前端需要提示
+    requires_restart = False
+    if "cameras" in updates and tracker is not None:
+        current = getattr(tracker, "camera_indices", [])
+        if list(current) != list(cfg["cameras"]):
+            requires_restart = True
+
+    return {"ok": True, "config": cfg, "requires_restart": requires_restart}
+
+
+@router.get("/cameras/scan")
+async def scan_cameras():
+    """探测可用的本地摄像头索引（0..limit-1）。"""
+    import cv2
+
+    cfg = runtime_config.load()
+    limit = cfg["camera_scan_limit"]
+
+    backend = getattr(cv2, "CAP_DSHOW", None)
+    backends = []
+    if os.name == "nt" and backend is not None:
+        backends.append(backend)
+    backends.append(None)
+    if backend is not None and backend not in backends:
+        backends.append(backend)
+
+    available = []
+    misses_after_found = 0
+
+    for idx in range(limit):
+        opened = False
+        for current_backend in backends:
+            cap = cv2.VideoCapture(idx) if current_backend is None else cv2.VideoCapture(idx, current_backend)
+            if not cap.isOpened():
+                cap.release()
+                continue
+            ok, _ = cap.read()
+            cap.release()
+            if ok:
+                opened = True
+                break
+
+        if opened:
+            available.append({"index": idx, "label": "摄像头 %d" % idx})
+            misses_after_found = 0
+        elif available:
+            misses_after_found += 1
+            if misses_after_found >= 2:
+                break
+
+    # 即便没扫到也要保证至少能选默认 0
+    if not available:
+        available.append({"index": 0, "label": "摄像头 0（未检测到，启动时再次尝试）"})
+
+    return {
+        "available": available,
+        "selected": cfg["cameras"],
+    }

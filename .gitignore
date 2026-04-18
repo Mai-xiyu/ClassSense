@@ -22,8 +22,11 @@ env/
 .DS_Store
 Thumbs.db
 
-# Model weights (too large for git)
+# Model weights (default ignored, but ship the ones we rely on)
 *.pt
+!yolov8m-pose.pt
+!yolov8s-pose.pt
+!yolov8n-pose.pt
 
 # Logs
 *.log

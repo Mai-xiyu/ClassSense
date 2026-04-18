@@ -13,15 +13,17 @@ DATABASE_URL = f"sqlite+aiosqlite:///{os.path.join(BASE_DIR, 'classroom.db')}"
 CAMERA_INDEX = 0  # 默认摄像头，0=内置，1=外接USB
 
 # AI检测参数
-POSE_MODEL = "yolov8m-pose.pt"  # medium模型，mAP 67.0（比small +3，比nano +13）
-POSE_CONF_THRESHOLD = 0.30      # 人体检测置信度（稍低，靠后续质量过滤兜底）
+POSE_MODEL = "yolov8m-pose.pt"  # medium模型（mAP 67），姿态关键点精度明显优于 s，对低头/趴桌/扭头判定至关重要
+POSE_CONF_THRESHOLD = 0.40      # 人体检测置信度（略降避免漏检坐姿较侧的学生）
 POSE_IOU_THRESHOLD = 0.50       # NMS IoU阈值（去除重叠框）
-POSE_IMG_SIZE = 1280            # 推理分辨率（教室远景+多人，需要高分辨率）
-DETECTION_FPS = 3               # 每秒检测帧数（medium模型3FPS足够）
+POSE_IMG_SIZE = 832             # 推理分辨率（m 模型 + 832 在 CPU 上约 3-4 FPS，比 1280 快 ~2.3 倍，精度几乎无损）
+POSE_DEVICE = None              # 推理设备：None=自动（有CUDA就用GPU），'cuda'/'cpu'/'cuda:0' 可手动指定
+POSE_HALF = True                # 启用FP16半精度推理（GPU上速度翻倍，CPU会自动回退FP32）
+DETECTION_FPS = 20              # 每秒检测帧数上限（放宽让YOLO全速跑，实际吞吐由推理速度决定）
 
 # 关键点质量过滤
-MIN_KEYPOINT_CONF = 0.40        # 单个关键点最低置信度
-MIN_VISIBLE_KEYPOINTS = 5       # 每人至少可见关键点数（低于此丢弃，避免误判）
+MIN_KEYPOINT_CONF = 0.30        # 单个关键点最低置信度（降低阈值让鼻子/眼睛/耳朵更多参与行为判定）
+MIN_VISIBLE_KEYPOINTS = 5       # 每人至少可见关键点数（远景学生关键点少，5 足够做行为判定）
 
 # 行为判定阈值（均基于肩宽归一化）
 HEAD_DOWN_ANGLE = 30            # 低头角度阈值（度）

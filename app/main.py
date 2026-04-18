@@ -27,6 +27,7 @@ tracker: AttentionTracker = None
 _current_session_id: int = None
 _main_loop: asyncio.AbstractEventLoop = None
 _is_class_active: bool = False  # 当前是否在上课
+_last_snapshot_ts: float = 0.0   # 上一次写库时间（秒），用于按固定间隔采样
 
 
 async def _push_data(data: dict):
@@ -52,10 +53,15 @@ async def _save_snapshot(data: dict):
 
 def _on_detection_data_with_save(data: dict):
     """AI子线程的同步回调 → 跨线程调度到主事件循环"""
+    global _last_snapshot_ts
     if _main_loop is None or _main_loop.is_closed():
         return
     asyncio.run_coroutine_threadsafe(_push_data(data), _main_loop)
-    if data.get("elapsed_seconds", 0) % 3 == 0:
+    # 固定 3 秒入库一次（不依赖 FPS，避免高 FPS 重复写/低 FPS 漏写）
+    import time as _time
+    now = _time.time()
+    if now - _last_snapshot_ts >= 3.0:
+        _last_snapshot_ts = now
         asyncio.run_coroutine_threadsafe(_save_snapshot(data), _main_loop)
     # 喂数据给 Agent 管理器
     agent_manager.feed_data(data)
@@ -63,10 +69,12 @@ def _on_detection_data_with_save(data: dict):
 
 async def start_class(name: str = None):
     """上课：创建课堂记录，启动AI检测"""
-    global tracker, _current_session_id, _is_class_active
+    global tracker, _current_session_id, _is_class_active, _last_snapshot_ts
 
     if _is_class_active:
         return {"error": "课堂已在进行中"}
+
+    _last_snapshot_ts = 0.0
 
     # 创建课堂会话
     session_name = name or f"课堂 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -77,10 +85,26 @@ async def start_class(name: str = None):
         await db.refresh(session)
         _current_session_id = session.id
 
-    # 启动AI追踪器
-    tracker = AttentionTracker()
+    # 启动AI追踪器（使用运行时配置中选择的摄像头和调试开关）
+    from app import runtime_config
+    app_cfg = runtime_config.load()
+    tracker = AttentionTracker(
+        camera_indices=app_cfg["cameras"],
+        debug_enabled=app_cfg["debug_preview_enabled"],
+    )
     tracker.on_data(_on_detection_data_with_save)
-    tracker.start()
+    started = tracker.start()
+    if not started:
+        tracker = None
+        _current_session_id = None
+        async with async_session() as db:
+            stmt = select(ClassSession).where(ClassSession.id == session.id)
+            result = await db.execute(stmt)
+            created_session = result.scalar_one_or_none()
+            if created_session is not None:
+                await db.delete(created_session)
+                await db.commit()
+        return {"error": "选中的摄像头无法打开，请先去设置页检查摄像头配置"}
     _is_class_active = True
 
     # 启动 Agent 定时分析

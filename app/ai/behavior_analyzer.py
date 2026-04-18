@@ -112,6 +112,11 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
         if abs(nose_drop) < 0.1 and eyes_hidden:
             return LYING_DOWN
 
+    # 方法C：整张脸都被遮挡（鼻子+双眼都不可见）而肩膀可见
+    # → 极大概率是趴在手臂上（脸朝下埋在桌面）
+    if not has_nose and eyes_hidden:
+        return LYING_DOWN
+
     # ---- 2. 举手检测 ----
     # 使用肩宽归一化，远近都适用；肩宽无效时回退到固定像素
     raise_threshold = shoulder_width * 0.3 if shoulder_width > 15 else HAND_RAISE_MARGIN
@@ -127,10 +132,13 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
         head_drop = nose[1] - shoulder_mid_y
         relative_drop = head_drop / shoulder_width
         # 鼻子明显低于肩膀中点（看手机、做笔记）
-        if relative_drop > 0.35:
+        if relative_drop > 0.25:
             return HEAD_DOWN
         # 鼻子略低于肩膀 + 双眼不可见 → 面部朝下
-        if relative_drop > 0.15 and eyes_hidden:
+        if relative_drop > 0.10 and eyes_hidden:
+            return HEAD_DOWN
+        # 只有一只眼可见也算低头（头已明显下垂侧歪）
+        if relative_drop > 0.15 and (l_eye_vis != r_eye_vis):
             return HEAD_DOWN
 
     # ---- 4. 扭头检测 ----
@@ -142,14 +150,18 @@ def analyze_behavior(keypoints: np.ndarray) -> str:
             if ear_span > 10:
                 mid_ear_x = (l_ear[0] + r_ear[0]) / 2
                 nose_offset = abs(nose[0] - mid_ear_x) / ear_span
-                if nose_offset > FACE_DIRECTION_THRESHOLD * 1.5:
+                # 原阈值 * 1.5 = 0.45 过严，降到 * 1.0 = 0.30 让日常扭头能触发
+                if nose_offset > FACE_DIRECTION_THRESHOLD:
                     return LOOKING_AWAY
         elif l_ear_visible != r_ear_visible:
             # 只看到一只耳朵 → 侧转幅度较大
             if shoulder_width > 15:
                 shoulder_mid_x = (l_shoulder[0] + r_shoulder[0]) / 2
-                if abs(nose[0] - shoulder_mid_x) > shoulder_width * 0.4:
+                if abs(nose[0] - shoulder_mid_x) > shoulder_width * 0.3:
                     return LOOKING_AWAY
+        # 两只耳朵都看不见 + 只有一只眼可见 → 明显扭头
+        elif not l_ear_visible and not r_ear_visible and (l_eye_vis != r_eye_vis):
+            return LOOKING_AWAY
 
     # ---- 5. 默认专注 ----
     return FOCUSED
