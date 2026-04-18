@@ -6,6 +6,8 @@ import os
 
 import httpx
 
+from app.security import encrypt, decrypt, is_encrypted
+
 # 配置文件路径
 CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -23,22 +25,49 @@ DEFAULT_CONFIG = {
 }
 
 
+def _migrate_plaintext_if_needed(raw_cfg):
+    """首次加载若发现 api_key 是明文，自动加密回写一次。"""
+    key = raw_cfg.get("api_key") or ""
+    if key and not is_encrypted(key):
+        raw_cfg["api_key"] = encrypt(key)
+        try:
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(raw_cfg, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+
 def load_config() -> dict:
-    """读取 LLM 配置"""
+    """读取 LLM 配置，api_key 解密后返回。"""
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+            raw = json.load(f)
+        _migrate_plaintext_if_needed(raw)
+        cfg = dict(raw)
+        if cfg.get("api_key"):
+            cfg["api_key"] = decrypt(cfg["api_key"])
+        return cfg
     return dict(DEFAULT_CONFIG)
 
 
 def save_config(config: dict):
-    """保存 LLM 配置"""
+    """保存 LLM 配置，api_key 加密后落盘。"""
+    to_write = dict(config)
+    if to_write.get("api_key"):
+        to_write["api_key"] = encrypt(to_write["api_key"])
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+        json.dump(to_write, f, ensure_ascii=False, indent=2)
 
 
 def is_configured() -> bool:
-    """检查 LLM 是否已配置可用"""
+    """检查 LLM 是否已配置可用；隐私模式开启时强制视为未配置。"""
+    # 隐私模式闸门：禁用所有 LLM 调用
+    try:
+        from app import runtime_config
+        if runtime_config.load().get("privacy_mode"):
+            return False
+    except Exception:
+        pass
     cfg = load_config()
     return bool(cfg.get("enabled") and cfg.get("api_key") and cfg.get("base_url"))
 

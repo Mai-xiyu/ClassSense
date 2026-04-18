@@ -144,6 +144,27 @@
         </div>
     </div>
 
+    <!-- 隐私模式 -->
+    <div class="form-card" style="border-color:#f0d0ca;">
+        <h2 class="section-title" style="color:var(--red);"><i data-lucide="shield"></i> 隐私模式</h2>
+        <p class="card-desc">
+            开启后本节课将进入 <strong>最严格脱敏状态</strong>：
+            调试预览中所有人体框自动打马赛克 · LLM 调用全部禁用 · 不向数据库写入任何快照。
+            适用于公开课、外校听课、家长开放日等高敏感场景。
+        </p>
+
+        <div class="toggle-group form-group">
+            <label class="toggle">
+                <input type="checkbox" id="cfgPrivacyMode">
+                <span class="slider"></span>
+            </label>
+            <div class="toggle-label">
+                <strong>启用隐私模式</strong>
+                <span>实时专注度曲线仍会显示（仅聚合数字、无个人信息），但本节课数据不落盘、不调用大模型。</span>
+            </div>
+        </div>
+    </div>
+
     <!-- 调试与检测精度 -->
     <div class="form-card">
         <h2 class="section-title"><i data-lucide="bug"></i> 调试与检测精度</h2>
@@ -285,6 +306,7 @@ async function init() {
     document.getElementById('cfgDebugPreview').checked = !!appCfg.debug_preview_enabled;
     document.getElementById('cfgStabilityFrames').value = appCfg.behavior_stability_frames;
     document.getElementById('cfgIou').value = appCfg.tracker_iou_threshold;
+    document.getElementById('cfgPrivacyMode').checked = !!appCfg.privacy_mode;
     selectedCameras = appCfg.cameras.slice();
     renderCameras();
 
@@ -405,6 +427,7 @@ async function saveConfig() {
         cameras: selectedCameras,
         debug_preview_enabled: document.getElementById('cfgDebugPreview').checked,
         behavior_stability_frames: parseInt(document.getElementById('cfgStabilityFrames').value),
+        privacy_mode: document.getElementById('cfgPrivacyMode').checked,
         tracker_iou_threshold: parseFloat(document.getElementById('cfgIou').value),
     };
 

@@ -24,6 +24,9 @@ DEFAULTS = {
     "tracker_iou_threshold": 0.35,
     # 最多可扫描/使用的摄像头索引上限（用于扫描 0..N-1）
     "camera_scan_limit": 6,
+    # 隐私模式：开启后强制脱敏（预览马赛克）+ 禁用 LLM + 不写入任何快照
+    # 适用于公开课 / 外校听课 / 家长开放日等高敏感场景
+    "privacy_mode": False,
 }
 
 _lock = threading.Lock()
@@ -75,6 +78,8 @@ def _sanitize(cfg: dict) -> dict:
         scan = 6
     merged["camera_scan_limit"] = max(1, min(scan, 10))
 
+    merged["privacy_mode"] = bool(merged.get("privacy_mode"))
+
     return merged
 
 
@@ -121,5 +126,10 @@ def get_cameras() -> list:
     return list(load()["cameras"])
 
 
+
+
+def is_privacy_mode() -> bool:
+    """隐私模式：禁写快照/禁 LLM/预览马赛克。"""
+    return bool(load().get("privacy_mode", False))
 def is_debug_enabled() -> bool:
     return bool(load()["debug_preview_enabled"])

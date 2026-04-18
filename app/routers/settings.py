@@ -123,6 +123,7 @@ class AppConfigUpdate(BaseModel):
     debug_preview_enabled: Optional[bool] = None
     behavior_stability_frames: Optional[int] = None
     tracker_iou_threshold: Optional[float] = None
+    privacy_mode: Optional[bool] = None
 
 
 @router.get("/app")

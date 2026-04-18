@@ -56,7 +56,17 @@ def _on_detection_data_with_save(data: dict):
     global _last_snapshot_ts
     if _main_loop is None or _main_loop.is_closed():
         return
+
+    # 隐私模式：仍推 WebSocket 实时曲线（纯聚合数字无个人可识别信息），
+    # 但不写入数据库、不投喂 LLM Agent。保证"公开课全程零持久化"。
+    from app import runtime_config
+    privacy = runtime_config.is_privacy_mode()
+
     asyncio.run_coroutine_threadsafe(_push_data(data), _main_loop)
+
+    if privacy:
+        return
+
     # 固定 3 秒入库一次（不依赖 FPS，避免高 FPS 重复写/低 FPS 漏写）
     import time as _time
     now = _time.time()

@@ -288,6 +288,19 @@ class AttentionTracker(object):
                 y1 = max(0, min(height - 1, y1))
                 x2 = max(0, min(width - 1, x2))
                 y2 = max(0, min(height - 1, y2))
+
+                # 隐私模式：对人体区域做强马赛克（像素化），再叠框/标签
+                if runtime_config.is_privacy_mode() and x2 > x1 + 2 and y2 > y1 + 2:
+                    roi = preview[y1:y2, x1:x2]
+                    rh, rw = roi.shape[:2]
+                    block = max(6, min(rw, rh) // 12)
+                    small = cv2.resize(
+                        roi, (max(1, rw // block), max(1, rh // block)),
+                        interpolation=cv2.INTER_LINEAR,
+                    )
+                    mosaic = cv2.resize(small, (rw, rh), interpolation=cv2.INTER_NEAREST)
+                    preview[y1:y2, x1:x2] = mosaic
+
                 cv2.rectangle(preview, (x1, y1), (x2, y2), color, 2)
 
                 label = "#%d %s" % (index, DEBUG_BEHAVIOR_TAGS.get(behavior, "BODY"))

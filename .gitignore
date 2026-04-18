@@ -28,6 +28,9 @@ Thumbs.db
 !yolov8s-pose.pt
 !yolov8n-pose.pt
 
+# Local encryption key — MUST NOT be committed
+.secret_key
+
 # Logs
 *.log
 

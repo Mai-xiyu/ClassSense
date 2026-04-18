@@ -134,6 +134,9 @@ class AgentManager:
                 "agent": "summary",
                 "content": full_text,
                 "timestamp": datetime.now().isoformat(),
+                # 可解释性快照：保留发给 LLM 的 prompt，便于家长/督导事后复盘
+                "prompt_system": SUMMARY_SYSTEM,
+                "prompt_user": user_msg,
             })
             return full_text
         except Exception as e:
@@ -168,6 +171,9 @@ class AgentManager:
                 "content": full_text,
                 "elapsed": self._recent_data[-1].get("elapsed_seconds", 0) if self._recent_data else 0,
                 "timestamp": datetime.now().isoformat(),
+                # 可解释性快照：每条 AI 评论都带上系统/用户 prompt，便于质询时复盘
+                "prompt_system": system_prompt,
+                "prompt_user": user_msg,
             })
         except Exception as e:
             err = f"{agent_name} 分析失败: {e}"
