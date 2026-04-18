@@ -176,6 +176,17 @@
                 </ul>
             </div>
         </div>
+
+        <!-- 实时课堂转写（仅在 ASR 启用且非隐私模式时显示） -->
+        <div class="card slide-up-stagger-3" id="transcriptCard" style="display:none;">
+            <div class="card-header-flex">
+                <div class="card-title m-0"><i data-lucide="mic"></i> 实时课堂转写</div>
+                <span style="font-size:12px;color:var(--text-muted)" id="transcriptCount">0 段</span>
+            </div>
+            <div id="transcriptList" style="max-height:240px;overflow-y:auto;padding:8px 4px;font-size:13px;line-height:1.7;">
+                <span style="color:var(--text-muted)">等待第一段语音...</span>
+            </div>
+        </div>
     </div>
 
 </div>

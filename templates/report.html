@@ -42,6 +42,22 @@
             background: #f3f0fa; color: #7c6bb4;
         }
         .ai-history-item .time-tag { font-size: 11px; color: var(--text-muted); }
+        .ai-history-item.is-active { background: #efeaff; box-shadow: 0 2px 8px rgba(124,107,180,0.18); }
+        .ai-history-item .jump-btn {
+            float: right; font-size: 11px; color: #7c6bb4; cursor: pointer;
+            border: 1px solid #d4c9f0; background: #fff; padding: 1px 8px; border-radius: 10px;
+        }
+        .ai-history-item .jump-btn:hover { background: #f3f0fa; }
+        .transcript-row {
+            display: flex; gap: 10px; padding: 6px 8px; border-bottom: 1px dashed var(--border);
+            font-size: 13px; line-height: 1.6; cursor: pointer; transition: background .15s;
+        }
+        .transcript-row:hover { background: #f6f3fc; }
+        .transcript-row.is-active { background: #efeaff; }
+        .transcript-row .ts {
+            color: var(--purple); font-weight: 600; min-width: 52px;
+        }
+        .transcript-empty { color: var(--text-muted); font-size: 13px; padding: 8px; }
     </style>
     
 </head>
@@ -69,9 +85,20 @@
 
     <div class="report-section">
         <h2>专注度走势</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;">
+            曲线上的 <span style="color:#7c6bb4;font-weight:600;">●</span> 为 AI 洞察时刻；
+            <span style="color:#4a7fc4;font-weight:600;">◆</span> 为语音转写节点。
+            点击任意列表项可跳转到对应时刻。
+        </p>
         <div class="chart-area">
             <canvas id="reportChart"></canvas>
         </div>
+    </div>
+
+    <!-- 课堂语音转写 -->
+    <div class="report-section" id="transcriptSection" style="display:none;">
+        <h2>课堂语音转写</h2>
+        <div id="transcriptList" style="max-height:280px;overflow-y:auto;"></div>
     </div>
 
     <div class="report-section">
@@ -102,6 +129,32 @@
 
 <script>
 const sessionId = JSON.parse('{{ session_id | tojson }}');
+// 全局状态：报告页多个区块共享
+// classStart: 课堂开始 wall-clock（二者都是 Date），insightDots/transcriptDots: 画到图上的点
+let reportChart = null;
+let classStart = null;
+let snapshotMaxSec = 0;
+let insightDots = [];     // [{x: secLabel, y: scoreOnCurve, agent, content, ts}]
+let transcriptDots = [];  // [{x, y, start, end, text}]
+
+function fmtMMSS(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function nearestScoreAt(sec, snapshots) {
+    if (!snapshots.length) return 50;
+    let best = snapshots[0];
+    let bestDiff = Math.abs((best.elapsed_seconds || 0) - sec);
+    for (const s of snapshots) {
+        const d = Math.abs((s.elapsed_seconds || 0) - sec);
+        if (d < bestDiff) { bestDiff = d; best = s; }
+    }
+    return best.attention_score || 0;
+}
+
+function labelAt(sec) { return fmtMMSS(sec); }
 
 async function loadReport() {
     const resp = await fetch(`/api/sessions/${sessionId}`);
@@ -122,7 +175,12 @@ async function loadReport() {
         const first = data.snapshots[0].elapsed_seconds;
         const last = data.snapshots[data.snapshots.length - 1].elapsed_seconds;
         document.getElementById('rDuration').textContent = Math.round((last - first) / 60);
+        snapshotMaxSec = last;
     }
+    if (data.start_time) classStart = new Date(data.start_time);
+
+    // 全局保存快照，后续洞察/转写点位需要
+    window.__snapshots = data.snapshots;
 
     // 图表
     const labels = data.snapshots.map(s => {
@@ -145,6 +203,25 @@ async function loadReport() {
                 tension: 0.3,
                 pointRadius: 0,
                 borderWidth: 2,
+            },
+            {
+                label: 'AI 洞察',
+                data: [],            // 后续 loadAgentHistory 填入
+                showLine: false,
+                pointRadius: 6,
+                pointHoverRadius: 8,
+                pointBackgroundColor: '#7c6bb4',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+            },
+            {
+                label: '语音节点',
+                data: [],
+                showLine: false,
+                pointStyle: 'rectRot',
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#4a7fc4',
             }],
         },
         options: {
@@ -154,9 +231,39 @@ async function loadReport() {
                 x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7a7a7a', maxTicksLimit: 10 } },
                 y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7a7a7a' } },
             },
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const dsi = ctx.datasetIndex;
+                            if (dsi === 1) {
+                                const dot = insightDots[ctx.dataIndex];
+                                return dot ? (dot.agent + ': ' + (dot.content || '').slice(0, 40) + '...') : '';
+                            }
+                            if (dsi === 2) {
+                                const dot = transcriptDots[ctx.dataIndex];
+                                return dot ? ('[' + fmtMMSS(dot.start) + '] ' + (dot.text || '').slice(0, 40)) : '';
+                            }
+                            return '专注度 ' + Math.round(ctx.parsed.y) + '%';
+                        }
+                    }
+                }
+            },
+            onClick: (evt, items) => {
+                if (!items.length) return;
+                const it = items[0];
+                if (it.datasetIndex === 1) {
+                    const dot = insightDots[it.index];
+                    if (dot) scrollToInsight(dot.id);
+                } else if (it.datasetIndex === 2) {
+                    const dot = transcriptDots[it.index];
+                    if (dot) scrollToTranscript(dot.start);
+                }
+            }
         },
     });
+    reportChart = Chart.getChart('reportChart');
 
     // 建议（基于前端简单分析）
     const avgScore = scores.reduce((a,b) => a+b, 0) / scores.length;
@@ -196,14 +303,38 @@ async function loadAgentHistory() {
         const list = document.getElementById('aiHistoryList');
 
         const agentNames = { student: '学生视角', teacher: '教学顾问', summary: '汇总' };
-        history.forEach(item => {
+        const snaps = window.__snapshots || [];
+        history.forEach((item, idx) => {
+            const id = 'insight-' + idx;
+            // 推断该洞察对应的"上课秒数"：用 timestamp 减去 classStart
+            let elapsedSec = item.elapsed || 0;
+            if (!elapsedSec && item.timestamp && classStart) {
+                const ts = new Date(item.timestamp);
+                elapsedSec = Math.max(0, Math.floor((ts - classStart) / 1000));
+            }
+            const score = nearestScoreAt(elapsedSec, snaps);
+            insightDots.push({
+                id, x: labelAt(elapsedSec), y: score,
+                agent: agentNames[item.agent] || item.agent,
+                content: item.content,
+                ts: item.timestamp || '',
+            });
+
             const div = document.createElement('div');
             div.className = 'ai-history-item';
-            div.innerHTML = `<span class="agent-tag">${agentNames[item.agent] || item.agent}</span>` +
-                `<span class="time-tag">${item.timestamp || ''}</span>` +
-                `<p style="margin:8px 0 0;white-space:pre-wrap">${item.content}</p>`;
+            div.id = id;
+            div.innerHTML = '<span class="agent-tag">' + (agentNames[item.agent] || item.agent) + '</span>' +
+                '<span class="time-tag">' + (item.timestamp || '') + ' · 第 ' + Math.floor(elapsedSec/60) + ' 分钟</span>' +
+                '<button class="jump-btn" onclick="jumpChartTo(' + elapsedSec + ')">在曲线上定位</button>' +
+                '<p style="margin:8px 0 0;white-space:pre-wrap">' + (item.content || '').replace(/</g,'&lt;') + '</p>';
             list.appendChild(div);
         });
+
+        // 把洞察点画上去（dataset[1]）
+        if (reportChart) {
+            reportChart.data.datasets[1].data = insightDots.map(d => ({ x: d.x, y: d.y }));
+            reportChart.update('none');
+        }
 
         // 检查是否有 summary
         const latest = await (await fetch(`/api/agent/latest?session_id=${sessionId}`)).json();
@@ -290,8 +421,77 @@ async function generateAISummary() {
     };
 }
 
-loadReport();
-loadAgentHistory();
+loadReport().then(() => {
+    loadAgentHistory();
+    loadTranscript();
+});
+
+async function loadTranscript() {
+    try {
+        const resp = await fetch(`/api/sessions/${sessionId}/transcript`);
+        const segs = await resp.json();
+        if (!segs || !segs.length) return;
+        const section = document.getElementById('transcriptSection');
+        const list = document.getElementById('transcriptList');
+        section.style.display = '';
+        list.innerHTML = '';
+
+        const snaps = window.__snapshots || [];
+        segs.forEach((s, i) => {
+            const start = s.start_seconds || 0;
+            const score = nearestScoreAt(start, snaps);
+            transcriptDots.push({ x: labelAt(start), y: score, start, end: s.end_seconds, text: s.text });
+
+            const row = document.createElement('div');
+            row.className = 'transcript-row';
+            row.id = 'tr-' + i;
+            row.dataset.start = String(start);
+            row.innerHTML = '<span class="ts">[' + fmtMMSS(start) + ']</span>' +
+                '<span>' + (s.text || '').replace(/</g, '&lt;') + '</span>';
+            row.onclick = () => jumpChartTo(start);
+            list.appendChild(row);
+        });
+
+        if (reportChart) {
+            // 转写节点太密会糊，按每 ~30 秒一段降采样
+            const sampled = [];
+            let lastSec = -999;
+            transcriptDots.forEach(d => {
+                if (d.start - lastSec >= 25) {
+                    sampled.push({ x: d.x, y: d.y });
+                    lastSec = d.start;
+                }
+            });
+            reportChart.data.datasets[2].data = sampled;
+            reportChart.update('none');
+        }
+    } catch (e) { console.warn('transcript', e); }
+}
+
+function jumpChartTo(sec) {
+    // 高亮最近的转写行
+    document.querySelectorAll('.transcript-row.is-active').forEach(el => el.classList.remove('is-active'));
+    let best = null, bestDiff = Infinity;
+    document.querySelectorAll('.transcript-row').forEach(el => {
+        const d = Math.abs(parseFloat(el.dataset.start || '0') - sec);
+        if (d < bestDiff) { bestDiff = d; best = el; }
+    });
+    if (best) {
+        best.classList.add('is-active');
+        best.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function scrollToInsight(id) {
+    document.querySelectorAll('.ai-history-item.is-active').forEach(el => el.classList.remove('is-active'));
+    const el = document.getElementById(id);
+    if (el) {
+        el.classList.add('is-active');
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function scrollToTranscript(start) { jumpChartTo(start); }
 </script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
 <script>lucide.createIcons();</script>

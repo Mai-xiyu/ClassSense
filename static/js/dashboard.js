@@ -252,6 +252,10 @@ function connectWebSocket() {
             onAgentError(data.agent, data.error);
             return;
         }
+        if (data.type === 'transcript') {
+            onTranscript(data);
+            return;
+        }
         if (classActive) {
             updateDashboard(data);
         }
@@ -659,3 +663,29 @@ async function checkAgentStatus() {
     } catch (e) { /* ignore */ }
 }
 checkAgentStatus();
+
+// ============================================================
+// 实时课堂转写（ASR）
+// ============================================================
+let _transcriptCount = 0;
+function onTranscript(data) {
+    const card = document.getElementById('transcriptCard');
+    const list = document.getElementById('transcriptList');
+    if (!card || !list) return;
+    if (card.style.display === 'none') {
+        card.style.display = '';
+        list.innerHTML = '';
+    }
+    const start = data.start_seconds || 0;
+    const mm = String(Math.floor(start / 60)).padStart(2, '0');
+    const ss = String(Math.floor(start % 60)).padStart(2, '0');
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:6px 8px;border-bottom:1px dashed var(--border);';
+    row.innerHTML =
+        '<span style="color:var(--purple);font-weight:600;margin-right:8px;">[' + mm + ':' + ss + ']</span>' +
+        '<span>' + (data.text || '').replace(/</g, '&lt;') + '</span>';
+    list.appendChild(row);
+    list.scrollTop = list.scrollHeight;
+    _transcriptCount += 1;
+    document.getElementById('transcriptCount').textContent = _transcriptCount + ' 段';
+}
