@@ -20,6 +20,7 @@ class ClassSession(Base):
 
     snapshots = relationship("AttentionSnapshot", back_populates="session", cascade="all, delete-orphan")
     insights = relationship("AgentInsight", back_populates="session", cascade="all, delete-orphan")
+    transcripts = relationship("TranscriptSegment", back_populates="session", cascade="all, delete-orphan")
 
 
 class AgentInsight(Base):
@@ -37,6 +38,21 @@ class AgentInsight(Base):
     prompt_user = Column(String, nullable=True)
 
     session = relationship("ClassSession", back_populates="insights")
+
+
+class TranscriptSegment(Base):
+    """语音转写分段（按 session 隔离）"""
+    __tablename__ = "transcript_segments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("class_sessions.id"), nullable=False, index=True)
+    start_seconds = Column(Float, default=0.0)  # 相对上课开始
+    end_seconds = Column(Float, default=0.0)
+    text = Column(String, nullable=False)
+    speaker = Column(String, default="teacher")
+    timestamp = Column(DateTime, default=datetime.now)
+
+    session = relationship("ClassSession", back_populates="transcripts")
 
 
 class AttentionSnapshot(Base):

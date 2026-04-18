@@ -12,7 +12,7 @@ from app.config import BASE_DIR
 from sqlalchemy import select, func, update
 
 from app.database import init_db, async_session
-from app.models import ClassSession, AttentionSnapshot
+from app.models import ClassSession, AttentionSnapshot, TranscriptSegment
 from app.ai.attention_tracker import AttentionTracker
 from app.routers import websocket as ws_router
 from app.routers import api as api_router
@@ -20,6 +20,7 @@ from app.routers import pages as page_router
 from app.routers import agent as agent_router
 from app.routers import settings as settings_router
 from app.agents.manager import agent_manager
+from app.asr.whisper_worker import asr_worker
 import os
 
 # 全局追踪器实例
@@ -77,6 +78,36 @@ def _on_detection_data_with_save(data: dict):
     agent_manager.feed_data(data)
 
 
+async def _save_transcript(seg: dict):
+    """异步入库 + 喂 Agent + 推 WS"""
+    sid = _current_session_id
+    if sid is None:
+        return
+    async with async_session() as db:
+        row = TranscriptSegment(
+            session_id=sid,
+            start_seconds=seg.get("start_seconds", 0.0),
+            end_seconds=seg.get("end_seconds", 0.0),
+            text=seg.get("text", ""),
+        )
+        db.add(row)
+        await db.commit()
+    # 喂 Agent，作为下一次分析的上下文
+    agent_manager.feed_transcript(seg)
+    # 推到前端
+    await ws_router.broadcast({"type": "transcript", **seg})
+
+
+def _on_asr_segment(seg: dict):
+    """ASR 子线程同步回调 → 主事件循环"""
+    from app import runtime_config
+    if runtime_config.is_privacy_mode():
+        return
+    if _main_loop is None or _main_loop.is_closed():
+        return
+    asyncio.run_coroutine_threadsafe(_save_transcript(seg), _main_loop)
+
+
 async def start_class(name: str = None):
     """上课：创建课堂记录，启动AI检测"""
     global tracker, _current_session_id, _is_class_active, _last_snapshot_ts
@@ -120,6 +151,17 @@ async def start_class(name: str = None):
     # 启动 Agent 定时分析
     agent_manager.start(_current_session_id, _main_loop)
 
+    # 启动语音转写（如设置开启且非隐私模式）
+    if runtime_config.is_asr_enabled():
+        ok = asr_worker.start(
+            mic_index=app_cfg.get("asr_mic_index", -1),
+            model_size=app_cfg.get("asr_model_size", "small"),
+            language=app_cfg.get("asr_language", "zh"),
+            on_segment=_on_asr_segment,
+        )
+        if not ok:
+            print(f"[上课] 语音转写未启动: {asr_worker.last_error()}")
+
     print(f"[上课] 课堂开始，ID: {_current_session_id}, 名称: {session_name}")
     return {"session_id": _current_session_id, "name": session_name}
 
@@ -133,6 +175,7 @@ async def stop_class():
 
     # 停止追踪器和 Agent
     agent_manager.stop()
+    asr_worker.stop()
     tracker.stop()
     tracker = None
     _is_class_active = False

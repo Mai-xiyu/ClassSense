@@ -124,6 +124,10 @@ class AppConfigUpdate(BaseModel):
     behavior_stability_frames: Optional[int] = None
     tracker_iou_threshold: Optional[float] = None
     privacy_mode: Optional[bool] = None
+    asr_enabled: Optional[bool] = None
+    asr_mic_index: Optional[int] = None
+    asr_model_size: Optional[str] = None
+    asr_language: Optional[str] = None
 
 
 @router.get("/app")
@@ -149,6 +153,11 @@ async def update_app_config(body: AppConfigUpdate):
     if "cameras" in updates and tracker is not None:
         current = getattr(tracker, "camera_indices", [])
         if list(current) != list(cfg["cameras"]):
+            requires_restart = True
+    # ASR 变更也需重启课堂才能生效
+    if any(k in updates for k in ("asr_enabled", "asr_mic_index", "asr_model_size", "asr_language")):
+        from app.main import _is_class_active
+        if _is_class_active:
             requires_restart = True
 
     return {"ok": True, "config": cfg, "requires_restart": requires_restart}
@@ -201,4 +210,16 @@ async def scan_cameras():
     return {
         "available": available,
         "selected": cfg["cameras"],
+    }
+
+
+@router.get("/microphones/scan")
+async def scan_microphones():
+    """枚举可用输入设备，供前端选择。"""
+    from app.asr.whisper_worker import list_microphones, asr_dependencies_status
+    cfg = runtime_config.load()
+    return {
+        "available": list_microphones(),
+        "selected": cfg.get("asr_mic_index", -1),
+        "deps": asr_dependencies_status(),
     }

@@ -27,6 +27,11 @@ DEFAULTS = {
     # 隐私模式：开启后强制脱敏（预览马赛克）+ 禁用 LLM + 不写入任何快照
     # 适用于公开课 / 外校听课 / 家长开放日等高敏感场景
     "privacy_mode": False,
+    # 语音转写（本地 faster-whisper）
+    "asr_enabled": False,
+    "asr_mic_index": -1,        # -1 = 系统默认麦克风
+    "asr_model_size": "small",  # tiny / base / small / medium
+    "asr_language": "zh",
 }
 
 _lock = threading.Lock()
@@ -80,6 +85,19 @@ def _sanitize(cfg: dict) -> dict:
 
     merged["privacy_mode"] = bool(merged.get("privacy_mode"))
 
+    merged["asr_enabled"] = bool(merged.get("asr_enabled"))
+    try:
+        mic = int(merged.get("asr_mic_index", -1))
+    except (TypeError, ValueError):
+        mic = -1
+    merged["asr_mic_index"] = mic
+    size = str(merged.get("asr_model_size", "small")).lower()
+    if size not in ("tiny", "base", "small", "medium"):
+        size = "small"
+    merged["asr_model_size"] = size
+    lang = str(merged.get("asr_language", "zh")).lower()
+    merged["asr_language"] = lang or "zh"
+
     return merged
 
 
@@ -131,5 +149,14 @@ def get_cameras() -> list:
 def is_privacy_mode() -> bool:
     """隐私模式：禁写快照/禁 LLM/预览马赛克。"""
     return bool(load().get("privacy_mode", False))
+
+
+def is_asr_enabled() -> bool:
+    """语音转写开关。隐私模式下强制关闭（麦克风也不采集）。"""
+    cfg = load()
+    if cfg.get("privacy_mode"):
+        return False
+    return bool(cfg.get("asr_enabled", False))
+
 def is_debug_enabled() -> bool:
     return bool(load()["debug_preview_enabled"])

@@ -31,6 +31,7 @@ class AgentManager:
 
     def __init__(self):
         self._recent_data: collections.deque = collections.deque(maxlen=600)
+        self._recent_transcript: collections.deque = collections.deque(maxlen=200)
         self._task: asyncio.Task | None = None
         self._running = False
         self._session_id: int | None = None
@@ -46,6 +47,7 @@ class AgentManager:
         self._session_id = session_id
         self._running = True
         self._recent_data.clear()
+        self._recent_transcript.clear()
         self.latest = {"student": None, "teacher": None, "summary": None}
         self.history = []
         self._task = loop.create_task(self._periodic_loop())
@@ -60,7 +62,9 @@ class AgentManager:
     def feed_data(self, data: dict):
         """从检测线程同步调用，喂入最新数据"""
         self._recent_data.append(data)
-
+    def feed_transcript(self, seg: dict):
+        """语音转写分段（含 start/end_seconds + text）入队，下轮分析会拼入 prompt"""
+        self._recent_transcript.append(seg)
     # ---------- 定时循环 ----------
 
     async def _periodic_loop(self):
@@ -258,7 +262,25 @@ class AgentManager:
             "avg_score_period": round(avg_score, 1),
             "trend": trend,
             "recent_events": events,
+            "transcript_text": self._format_recent_transcript(),
         }
+
+    def _format_recent_transcript(self, max_chars: int = 1200, window_seconds: float = 240.0) -> str:
+        """拼近 N 秒转写为带时间戳的文本，超长从头部截断。"""
+        if not self._recent_transcript:
+            return ""
+        segs = list(self._recent_transcript)
+        latest_end = segs[-1].get("end_seconds", 0.0)
+        kept = [s for s in segs if s.get("end_seconds", 0.0) >= latest_end - window_seconds]
+        lines = []
+        for s in kept:
+            mm = int(s.get("start_seconds", 0) // 60)
+            ss = int(s.get("start_seconds", 0) % 60)
+            lines.append(f"[{mm:02d}:{ss:02d}] {s.get('text','').strip()}")
+        text = "\n".join(lines).strip()
+        if len(text) > max_chars:
+            text = "…" + text[-max_chars:]
+        return text
 
     @staticmethod
     def _format_user_message(ctx: dict) -> str:
@@ -268,6 +290,7 @@ class AgentManager:
         ) or "暂无数据"
 
         events_str = "；".join(ctx["recent_events"]) if ctx["recent_events"] else "暂无特殊事件"
+        transcript_str = ctx.get("transcript_text") or "（未启用语音转写）"
 
         return (
             f"当前课堂数据（已上课 {ctx['elapsed_minutes']} 分钟）：\n"
@@ -276,7 +299,8 @@ class AgentManager:
             f"- 本阶段平均专注度：{ctx['avg_score_period']}%\n"
             f"- 趋势：{ctx['trend']}\n"
             f"- 行为分布：{beh_str}\n"
-            f"- 近期事件：{events_str}"
+            f"- 近期事件：{events_str}\n"
+            f"- 老师近期讲课内容（语音转写，可能含误识别）：\n{transcript_str}"
         )
 
 

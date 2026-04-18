@@ -165,6 +165,49 @@
         </div>
     </div>
 
+    <!-- 语音转写 -->
+    <div class="form-card">
+        <h2 class="section-title"><i data-lucide="mic"></i> 语音转写（本地 Whisper）</h2>
+        <p class="card-desc">
+            开启后将在课堂期间用本地 <strong>faster-whisper</strong> 把老师/课堂的语音转成带时间戳的文字，
+            和专注度曲线一起喂给 AI 助教，实现「内容→反应」级别的洞察。
+            <strong>音频不离开本机</strong>。隐私模式开启时本功能自动停用。
+        </p>
+
+        <div class="toggle-group form-group">
+            <label class="toggle">
+                <input type="checkbox" id="cfgAsrEnabled">
+                <span class="slider"></span>
+            </label>
+            <div class="toggle-label">
+                <strong>启用语音转写</strong>
+                <span id="asrDepHint">需安装依赖：<code>pip install faster-whisper sounddevice</code></span>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>麦克风设备</label>
+                <select id="cfgAsrMic"></select>
+                <div class="hint">
+                    <button type="button" class="btn-pill" id="btnScanMics" onclick="scanMicrophones()" style="padding:4px 10px;font-size:12px;">
+                        <i data-lucide="refresh-cw"></i> <span>重新扫描</span>
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>模型大小</label>
+                <select id="cfgAsrModel">
+                    <option value="tiny">tiny（39MB，最快、精度差）</option>
+                    <option value="base">base（74MB，速度好）</option>
+                    <option value="small" selected>small（244MB，推荐）</option>
+                    <option value="medium">medium（769MB，需较强 CPU/GPU）</option>
+                </select>
+                <div class="hint">首次启用会自动下载到 ~/.cache/huggingface</div>
+            </div>
+        </div>
+    </div>
+
     <!-- 调试与检测精度 -->
     <div class="form-card">
         <h2 class="section-title"><i data-lucide="bug"></i> 调试与检测精度</h2>
@@ -307,11 +350,14 @@ async function init() {
     document.getElementById('cfgStabilityFrames').value = appCfg.behavior_stability_frames;
     document.getElementById('cfgIou').value = appCfg.tracker_iou_threshold;
     document.getElementById('cfgPrivacyMode').checked = !!appCfg.privacy_mode;
+    document.getElementById('cfgAsrEnabled').checked = !!appCfg.asr_enabled;
+    document.getElementById('cfgAsrModel').value = appCfg.asr_model_size || 'small';
     selectedCameras = appCfg.cameras.slice();
     renderCameras();
 
     // 后台扫描一次，取真正可用的列表
     scanCameras(true);
+    scanMicrophones(true, appCfg.asr_mic_index);
 
     if (window.lucide) lucide.createIcons();
 }
@@ -391,6 +437,44 @@ async function scanCameras(silent = false) {
     }
 }
 
+async function scanMicrophones(silent = false, preselect = -1) {
+    try {
+        const resp = await fetch('/api/settings/microphones/scan');
+        const data = await resp.json();
+        const select = document.getElementById('cfgAsrMic');
+        const want = (preselect !== undefined && preselect !== null) ? preselect : data.selected;
+        select.innerHTML = '';
+        const optDefault = document.createElement('option');
+        optDefault.value = '-1';
+        optDefault.textContent = '系统默认麦克风';
+        select.appendChild(optDefault);
+        (data.available || []).forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = String(m.index);
+            opt.textContent = (m.default ? '★ ' : '') + m.name + ` (#${m.index})`;
+            select.appendChild(opt);
+        });
+        select.value = String(want);
+
+        // 依赖提示
+        const hint = document.getElementById('asrDepHint');
+        const deps = data.deps || {};
+        if (deps.ready) {
+            hint.innerHTML = '<span style="color:var(--green)">✓ 依赖已安装，可启用</span>';
+        } else {
+            const miss = [];
+            if (!deps.faster_whisper) miss.push('faster-whisper');
+            if (!deps.sounddevice) miss.push('sounddevice');
+            if (!deps.numpy) miss.push('numpy');
+            hint.innerHTML = '<span style="color:var(--red)">⚠ 缺少依赖：' +
+                miss.join(', ') + '。请在终端执行 <code>pip install ' + miss.join(' ') + '</code></span>';
+        }
+        if (!silent) showResult('info', `麦克风扫描完成，共 ${(data.available||[]).length} 个设备`);
+    } catch (e) {
+        if (!silent) showResult('error', '麦克风扫描失败: ' + e.message);
+    }
+}
+
 function applyPreset(key) {
     const p = presets[key];
     document.getElementById('cfgBaseUrl').value = p.base_url;
@@ -429,6 +513,9 @@ async function saveConfig() {
         behavior_stability_frames: parseInt(document.getElementById('cfgStabilityFrames').value),
         privacy_mode: document.getElementById('cfgPrivacyMode').checked,
         tracker_iou_threshold: parseFloat(document.getElementById('cfgIou').value),
+        asr_enabled: document.getElementById('cfgAsrEnabled').checked,
+        asr_mic_index: parseInt(document.getElementById('cfgAsrMic').value),
+        asr_model_size: document.getElementById('cfgAsrModel').value,
     };
 
     try {

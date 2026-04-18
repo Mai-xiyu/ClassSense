@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.database import get_db
-from app.models import ClassSession, AttentionSnapshot
+from app.models import ClassSession, AttentionSnapshot, TranscriptSegment
 
 router = APIRouter(prefix="/api")
 
@@ -97,6 +97,26 @@ async def get_session_detail(session_id: int, db: AsyncSession = Depends(get_db)
             for s in snapshots
         ],
     }
+
+
+@router.get("/sessions/{session_id}/transcript")
+async def get_session_transcript(session_id: int, db: AsyncSession = Depends(get_db)):
+    """获取指定课堂的完整语音转写。"""
+    stmt = (
+        select(TranscriptSegment)
+        .where(TranscriptSegment.session_id == session_id)
+        .order_by(TranscriptSegment.start_seconds)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "start_seconds": r.start_seconds,
+            "end_seconds": r.end_seconds,
+            "text": r.text,
+            "speaker": r.speaker,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/current")
