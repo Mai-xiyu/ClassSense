@@ -1,8 +1,8 @@
 {
-  "enabled": false,
-  "base_url": "https://api.deepseek.com/v1",
-  "api_key": "",
-  "model": "deepseek-chat",
+  "enabled": true,
+  "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "api_key": "sk-bc50a4618de34463b40e3fd77908bd77",
+  "model": "qwen-turbo",
   "max_tokens": 800,
   "temperature": 0.7,
   "agent_interval": 120

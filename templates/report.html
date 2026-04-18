@@ -219,42 +219,75 @@ async function loadAgentHistory() {
 
 async function generateAISummary() {
     const btn = document.getElementById('btnGenerateAI');
+    const hint = document.getElementById('aiGenerating');
+    const contentEl = document.getElementById('aiSummaryContent');
+
     btn.disabled = true;
-    document.getElementById('aiGenerating').style.display = '';
+    hint.style.display = '';
+    contentEl.textContent = '';
 
-    try {
-        // 连接 WebSocket 接收流式结果
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${location.host}/ws/attention`);
-        const contentEl = document.getElementById('aiSummaryContent');
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${location.host}/ws/attention`);
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'agent_chunk' && data.agent === 'summary') {
-                contentEl.textContent += data.content;
-                document.getElementById('aiGenerating').style.display = 'none';
-            }
-            if (data.type === 'agent_done' && data.agent === 'summary') {
-                contentEl.textContent = data.content;
-                btn.style.display = 'none';
-                ws.close();
-            }
-            if (data.type === 'agent_error') {
-                contentEl.textContent = '分析失败: ' + data.error;
-                document.getElementById('aiGenerating').style.display = 'none';
-                btn.disabled = false;
-                ws.close();
-            }
-        };
+    // 2 分钟硬超时，避免永远转圈
+    let firstChunkReceived = false;
+    const timeoutId = setTimeout(() => {
+        if (!firstChunkReceived) {
+            contentEl.textContent = '生成超时，请检查大模型配置或网络后重试';
+            hint.style.display = 'none';
+            btn.disabled = false;
+            try { ws.close(); } catch (e) {}
+        }
+    }, 120000);
 
-        ws.onopen = async () => {
-            await fetch('/api/agent/analyze', { method: 'POST' });
-        };
-    } catch (e) {
-        alert('生成失败: ' + e.message);
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'agent_chunk' && data.agent === 'summary') {
+            firstChunkReceived = true;
+            contentEl.textContent += data.content;
+            hint.style.display = 'none';
+        }
+        if (data.type === 'agent_done' && data.agent === 'summary') {
+            contentEl.textContent = data.content;
+            btn.style.display = 'none';
+            clearTimeout(timeoutId);
+            ws.close();
+        }
+        if (data.type === 'agent_error' && data.agent === 'summary') {
+            contentEl.textContent = '分析失败: ' + data.error;
+            hint.style.display = 'none';
+            btn.disabled = false;
+            clearTimeout(timeoutId);
+            ws.close();
+        }
+    };
+
+    ws.onerror = () => {
+        contentEl.textContent = 'WebSocket 连接失败，请刷新页面重试';
+        hint.style.display = 'none';
         btn.disabled = false;
-        document.getElementById('aiGenerating').style.display = 'none';
-    }
+        clearTimeout(timeoutId);
+    };
+
+    ws.onopen = async () => {
+        try {
+            const resp = await fetch('/api/agent/summary', { method: 'POST' });
+            const json = await resp.json();
+            if (json.error) {
+                contentEl.textContent = json.error;
+                hint.style.display = 'none';
+                btn.disabled = false;
+                clearTimeout(timeoutId);
+                ws.close();
+            }
+        } catch (e) {
+            contentEl.textContent = '触发失败: ' + e.message;
+            hint.style.display = 'none';
+            btn.disabled = false;
+            clearTimeout(timeoutId);
+            ws.close();
+        }
+    };
 }
 
 loadReport();
