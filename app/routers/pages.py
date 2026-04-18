@@ -31,6 +31,7 @@ async def dashboard_page(request: Request):
         context={
             "asset_version": _asset_version(),
             "debug_preview_enabled": cfg["debug_preview_enabled"],
+            "privacy_mode": cfg.get("privacy_mode", False),
         },
     )
 

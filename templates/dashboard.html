@@ -13,6 +13,13 @@
 </head>
 <body data-debug-preview-enabled="{{ '1' if debug_preview_enabled else '0' }}">
 
+{% if privacy_mode %}
+<div id="privacyBanner" style="background:#fdf0ed;border-bottom:1px solid #f0d0ca;color:#a83a2b;padding:10px 24px;font-size:13px;display:flex;align-items:center;gap:8px;">
+    <i data-lucide="shield" style="width:16px;height:16px;flex-shrink:0;"></i>
+    <span><strong>隐私模式运行中</strong>：本节课全员马赛克 · 零数据落盘 · AI 助教已临时禁用。可在<a href="/settings" style="color:#a83a2b;text-decoration:underline;">设置</a>中关闭。</span>
+</div>
+{% endif %}
+
 <!-- 顶部导航 -->
 <header class="topbar fade-in">
     <div class="logo">

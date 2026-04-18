@@ -59,6 +59,12 @@ def save_config(config: dict):
         json.dump(to_write, f, ensure_ascii=False, indent=2)
 
 
+def has_credentials() -> bool:
+    """仅检查凭据是否齐全（忽略隐私模式）。用于测试连通性等场景。"""
+    cfg = load_config()
+    return bool(cfg.get("enabled") and cfg.get("api_key") and cfg.get("base_url"))
+
+
 def is_configured() -> bool:
     """检查 LLM 是否已配置可用；隐私模式开启时强制视为未配置。"""
     # 隐私模式闸门：禁用所有 LLM 调用
@@ -68,8 +74,7 @@ def is_configured() -> bool:
             return False
     except Exception:
         pass
-    cfg = load_config()
-    return bool(cfg.get("enabled") and cfg.get("api_key") and cfg.get("base_url"))
+    return has_credentials()
 
 
 class LLMClient:
